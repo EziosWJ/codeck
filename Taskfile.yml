@@ -1,0 +1,147 @@
+version: '3'
+
+# Project automation for cronCodex.
+#
+#   task            list every task
+#   task setup      install frontend + Go dependencies (once)
+#   task run        build the UI and the binary, then serve
+#   task dev        backend + Vite dev server with hot reload
+#
+# The UI is compiled into the binary with //go:embed, so web/dist must exist
+# before the Go build runs. The `build` task orders that for you.
+
+vars:
+  BINARY: croncodex
+  # Not a git repository yet, so fall back to "dev" until tags exist.
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  # Point the server at a config file: `task run CONFIG=./croncodex.env`
+  CONFIG: ''
+  DEV_LDFLAGS: '-X main.version={{.VERSION}}'
+  RELEASE_LDFLAGS: '-s -w -X main.version={{.VERSION}}'
+
+# A single static binary with no libc dependency is the deployment target, so
+# every build (and the test suite) uses the pure-Go SQLite driver.
+env:
+  CGO_ENABLED: '0'
+
+tasks:
+  default:
+    desc: List the available tasks
+    silent: true
+    cmds:
+      - task --list
+
+  setup:
+    desc: Install frontend and Go dependencies
+    cmds:
+      - npm --prefix web install
+      - go mod download
+
+  build:web:
+    desc: Build the React UI into web/dist
+    dir: web
+    preconditions:
+      - sh: test -d node_modules
+        msg: "Frontend dependencies are missing — run `task setup` first."
+    sources:
+      - src/**/*.ts
+      - src/**/*.tsx
+      - src/**/*.css
+      - public/**/*
+      - index.html
+      - package.json
+      - tsconfig*.json
+      - vite.config.ts
+    generates:
+      - dist/**/*
+    cmds:
+      - npm run build
+
+  build:
+    desc: Build the binary with the UI embedded
+    deps: [build:web]
+    sources:
+      - main.go
+      - go.mod
+      - go.sum
+      - internal/**/*.go
+      - web/dist/**/*
+    generates:
+      - '{{.BINARY}}'
+    cmds:
+      - go build -trimpath -ldflags "{{.DEV_LDFLAGS}}" -o {{.BINARY}} .
+
+  build:release:
+    desc: Stripped, static release binary for the current platform
+    deps: [build:web]
+    cmds:
+      - go build -trimpath -ldflags "{{.RELEASE_LDFLAGS}}" -o {{.BINARY}} .
+      - printf 'built %s %s (%s)\n' {{.BINARY}} {{.VERSION}} "$(du -h {{.BINARY}} | cut -f1)"
+
+  run:
+    desc: Build everything and start the server in the foreground
+    deps: [build]
+    env:
+      CRONCODEX_CONFIG: '{{.CONFIG}}'
+    cmds:
+      - ./{{.BINARY}}
+
+  dev:
+    desc: Run the backend and the Vite dev server together (Ctrl-C stops both)
+    deps: [dev:api, dev:web]
+
+  dev:api:
+    desc: Run the backend on :8080 with the Vite dev server in front of it
+    deps: [build:web]
+    cmds:
+      - go run .
+
+  dev:web:
+    desc: Vite dev server on :5173, proxying /api to the backend
+    dir: web
+    cmds:
+      - npm run dev
+
+  test:
+    desc: Run the Go test suite
+    cmds:
+      - go test ./...
+
+  test:integration:
+    desc: Opt-in suite that drives the real Codex CLI (spends tokens)
+    cmds:
+      - CRONCODEX_INTEGRATION=1 go test -count=1 -v -run TestIntegrationRealCodex ./internal/codex/
+
+  lint:
+    desc: Static checks for Go and TypeScript
+    cmds:
+      - go vet ./...
+      - |
+        unformatted=$(gofmt -l .)
+        if [ -n "$unformatted" ]; then
+          echo "these files are not gofmt-clean:"
+          echo "$unformatted"
+          exit 1
+        fi
+      - npm --prefix web run lint
+
+  fmt:
+    desc: Format the Go sources
+    cmds:
+      - gofmt -w .
+
+  tidy:
+    desc: Synchronise go.mod and go.sum with the imports
+    cmds:
+      - go mod tidy
+
+  check:
+    desc: Everything CI would run
+    deps: [lint, test]
+
+  clean:
+    desc: Remove build output (node_modules is left alone)
+    cmds:
+      - rm -f {{.BINARY}}
+      - rm -rf web/dist .task
