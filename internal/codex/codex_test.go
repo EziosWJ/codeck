@@ -33,8 +33,15 @@ func TestGenerateConfigMinimalMode(t *testing.T) {
 		`model_reasoning_effort = "low"`,
 		`sandbox_mode = "read-only"`,
 		`approval_policy = "never"`,
+		`include_permissions_instructions = false`,
+		`include_apps_instructions = false`,
+		`include_collaboration_mode_instructions = false`,
+		`include_environment_context = false`,
+		"[skills]",
+		"include_instructions = false",
 		"[features]",
 		"apps = false",
+		"plugins = false",
 		"computer_use = false",
 		"browser_use = false",
 	} {
@@ -53,6 +60,9 @@ func TestGenerateConfigNonMinimalOmitsFeatureBlock(t *testing.T) {
 	if strings.Contains(cfg, "[features]") {
 		t.Errorf("non-minimal config should not disable features\n%s", cfg)
 	}
+	if strings.Contains(cfg, "[skills]") {
+		t.Errorf("non-minimal config should not force skills.include_instructions off\n%s", cfg)
+	}
 	if !strings.Contains(cfg, `sandbox_mode = "workspace-write"`) {
 		t.Errorf("sandbox mode not written\n%s", cfg)
 	}
@@ -64,6 +74,10 @@ func TestGenerateConfigWritesExplicitDefaults(t *testing.T) {
 		`model_reasoning_effort = "low"`,
 		`approval_policy = "never"`,
 		`sandbox_mode = "read-only"`,
+		`include_permissions_instructions = false`,
+		`include_apps_instructions = false`,
+		`include_collaboration_mode_instructions = false`,
+		`include_environment_context = false`,
 	} {
 		if !strings.Contains(cfg, want) {
 			t.Errorf("default config missing %q\n%s", want, cfg)
@@ -76,6 +90,49 @@ func TestGenerateConfigWritesExplicitDefaults(t *testing.T) {
 	}
 	if !strings.Contains(legacy, `approval_policy = "never"`) {
 		t.Errorf("empty approval should become never\n%s", legacy)
+	}
+}
+
+func TestGenerateConfigMinimalForcesIncludeOffAndSkills(t *testing.T) {
+	cfg := GenerateConfig(ProfileSpec{
+		Name:                                 "m",
+		IsMinimal:                            true,
+		IncludePermissionsInstructions:       true,
+		IncludeAppsInstructions:              true,
+		IncludeCollaborationModeInstructions: true,
+		IncludeEnvironmentContext:            true,
+	})
+	for _, want := range []string{
+		`include_permissions_instructions = false`,
+		`include_apps_instructions = false`,
+		`include_collaboration_mode_instructions = false`,
+		`include_environment_context = false`,
+		"[skills]",
+		"include_instructions = false",
+	} {
+		if !strings.Contains(cfg, want) {
+			t.Errorf("minimal config missing %q\n%s", want, cfg)
+		}
+	}
+}
+
+func TestGenerateConfigIncludeFlags(t *testing.T) {
+	cfg := GenerateConfig(ProfileSpec{
+		Name:                                 "x",
+		IncludePermissionsInstructions:       true,
+		IncludeAppsInstructions:              true,
+		IncludeCollaborationModeInstructions: true,
+		IncludeEnvironmentContext:            true,
+	})
+	for _, want := range []string{
+		`include_permissions_instructions = true`,
+		`include_apps_instructions = true`,
+		`include_collaboration_mode_instructions = true`,
+		`include_environment_context = true`,
+	} {
+		if !strings.Contains(cfg, want) {
+			t.Errorf("config missing %q\n%s", want, cfg)
+		}
 	}
 }
 
@@ -226,21 +283,25 @@ WARNING: proceeding, even though we could not create PATH aliases
 {"type":"item.started","item":{"id":"i0","type":"command_execution","command":"ls","aggregated_output":"","status":"in_progress"}}
 {"type":"item.completed","item":{"id":"i0","type":"command_execution","command":"ls","aggregated_output":"file.txt","exit_code":0,"status":"completed"}}
 {"type":"item.completed","item":{"id":"i1","type":"agent_message","text":"all done"}}
-{"type":"turn.completed","usage":{"input_tokens":123,"output_tokens":7}}
+{"type":"turn.completed","usage":{"input_tokens":123,"cached_input_tokens":40,"output_tokens":7,"total_tokens":130}}
+{"type":"token_count","info":{"last_token_usage":{"input_tokens":123,"cached_input_tokens":40,"output_tokens":7,"total_tokens":130}}}
 this line is not json either
 `
 	var events []Event
 	if err := scanEvents(strings.NewReader(stream), func(ev Event) { events = append(events, ev) }); err != nil {
 		t.Fatalf("scanEvents: %v", err)
 	}
-	if len(events) != 6 {
-		t.Fatalf("got %d events, want 6", len(events))
+	if len(events) != 7 {
+		t.Fatalf("got %d events, want 7", len(events))
 	}
 	if events[0].Type != EventThreadStarted || events[0].ThreadID != "t-1" {
 		t.Errorf("thread event wrong: %+v", events[0])
 	}
-	if events[5].Usage == nil || events[5].Usage.InputTokens != 123 {
+	if events[5].Usage == nil || events[5].Usage.InputTokens != 123 || events[5].Usage.CachedInputTokens != 40 {
 		t.Errorf("usage not parsed: %+v", events[5])
+	}
+	if got := eventUsage(events[6]); got == nil || got.CachedInputTokens != 40 || got.TotalTokens != 130 {
+		t.Errorf("token_count usage not parsed: %+v", events[6].Info)
 	}
 
 	item := events[4].Item

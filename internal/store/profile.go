@@ -16,18 +16,22 @@ var ErrNotFound = errors.New("not found")
 // own CODEX_HOME directory, so profile settings never touch the operator's real
 // ~/.codex/config.toml.
 type Profile struct {
-	ID              int64     `json:"id"`
-	Name            string    `json:"name"`
-	Description     string    `json:"description"`
-	Model           string    `json:"model"`
-	ReasoningEffort string    `json:"reasoning_effort"`
-	SandboxMode     string    `json:"sandbox_mode"`
-	ApprovalPolicy  string    `json:"approval_policy"`
-	ExtraConfig     string    `json:"extra_config"`
-	WorkDir         string    `json:"work_dir"`
-	IsMinimal       bool      `json:"is_minimal"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID                                   int64     `json:"id"`
+	Name                                 string    `json:"name"`
+	Description                          string    `json:"description"`
+	Model                                string    `json:"model"`
+	ReasoningEffort                      string    `json:"reasoning_effort"`
+	SandboxMode                          string    `json:"sandbox_mode"`
+	ApprovalPolicy                       string    `json:"approval_policy"`
+	ExtraConfig                          string    `json:"extra_config"`
+	WorkDir                              string    `json:"work_dir"`
+	IsMinimal                            bool      `json:"is_minimal"`
+	IncludePermissionsInstructions       bool      `json:"include_permissions_instructions"`
+	IncludeAppsInstructions              bool      `json:"include_apps_instructions"`
+	IncludeCollaborationModeInstructions bool      `json:"include_collaboration_mode_instructions"`
+	IncludeEnvironmentContext            bool      `json:"include_environment_context"`
+	CreatedAt                            time.Time `json:"created_at"`
+	UpdatedAt                            time.Time `json:"updated_at"`
 }
 
 const (
@@ -79,6 +83,12 @@ func (p *Profile) applyDefaults() {
 	case "", "none", "minimal":
 		p.ReasoningEffort = DefaultReasoningEffort
 	}
+	if p.IsMinimal {
+		p.IncludePermissionsInstructions = false
+		p.IncludeAppsInstructions = false
+		p.IncludeCollaborationModeInstructions = false
+		p.IncludeEnvironmentContext = false
+	}
 }
 
 // RequiresSandboxEscape reports whether the profile permits unsandboxed writes.
@@ -90,13 +100,18 @@ func (p *Profile) RequiresSandboxEscape() bool {
 func (p *Profile) HomeDirName() string { return p.Name }
 
 const profileCols = `id, name, description, model, reasoning_effort, sandbox_mode,
-	approval_policy, extra_config, work_dir, is_minimal, created_at, updated_at`
+	approval_policy, extra_config, work_dir, is_minimal,
+	include_permissions_instructions, include_apps_instructions,
+	include_collaboration_mode_instructions, include_environment_context,
+	created_at, updated_at`
 
 func scanProfile(sc interface{ Scan(...any) error }) (Profile, error) {
 	var p Profile
 	var created, updated string
 	err := sc.Scan(&p.ID, &p.Name, &p.Description, &p.Model, &p.ReasoningEffort,
 		&p.SandboxMode, &p.ApprovalPolicy, &p.ExtraConfig, &p.WorkDir, &p.IsMinimal,
+		&p.IncludePermissionsInstructions, &p.IncludeAppsInstructions,
+		&p.IncludeCollaborationModeInstructions, &p.IncludeEnvironmentContext,
 		&created, &updated)
 	if err != nil {
 		return p, err
@@ -143,10 +158,16 @@ func (d *DB) CreateProfile(p Profile) (Profile, error) {
 	now := formatTime(time.Now())
 	res, err := d.sql.Exec(`
 INSERT INTO profiles (name, description, model, reasoning_effort, sandbox_mode,
-    approval_policy, extra_config, work_dir, is_minimal, created_at, updated_at)
-VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    approval_policy, extra_config, work_dir, is_minimal,
+    include_permissions_instructions, include_apps_instructions,
+    include_collaboration_mode_instructions, include_environment_context,
+    created_at, updated_at)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		p.Name, p.Description, p.Model, p.ReasoningEffort, p.SandboxMode,
-		p.ApprovalPolicy, p.ExtraConfig, p.WorkDir, boolToInt(p.IsMinimal), now, now)
+		p.ApprovalPolicy, p.ExtraConfig, p.WorkDir, boolToInt(p.IsMinimal),
+		boolToInt(p.IncludePermissionsInstructions), boolToInt(p.IncludeAppsInstructions),
+		boolToInt(p.IncludeCollaborationModeInstructions), boolToInt(p.IncludeEnvironmentContext),
+		now, now)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			return Profile{}, fmt.Errorf("a profile named %q already exists", p.Name)
@@ -168,10 +189,14 @@ func (d *DB) UpdateProfile(p Profile) (Profile, error) {
 	res, err := d.sql.Exec(`
 UPDATE profiles SET name = ?, description = ?, model = ?, reasoning_effort = ?,
     sandbox_mode = ?, approval_policy = ?, extra_config = ?, work_dir = ?,
-    is_minimal = ?, updated_at = ?
+    is_minimal = ?, include_permissions_instructions = ?, include_apps_instructions = ?,
+    include_collaboration_mode_instructions = ?, include_environment_context = ?,
+    updated_at = ?
 WHERE id = ?`,
 		p.Name, p.Description, p.Model, p.ReasoningEffort, p.SandboxMode,
 		p.ApprovalPolicy, p.ExtraConfig, p.WorkDir, boolToInt(p.IsMinimal),
+		boolToInt(p.IncludePermissionsInstructions), boolToInt(p.IncludeAppsInstructions),
+		boolToInt(p.IncludeCollaborationModeInstructions), boolToInt(p.IncludeEnvironmentContext),
 		formatTime(time.Now()), p.ID)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {

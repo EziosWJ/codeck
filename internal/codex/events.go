@@ -18,6 +18,7 @@ const (
 	EventItemCompleted = "item.completed"
 	EventError         = "error"
 	EventTurnFailed    = "turn.failed"
+	EventTokenCount    = "token_count"
 	EventDelta         = "delta"
 )
 
@@ -33,12 +34,19 @@ const (
 
 // Event is one line of Codex's JSONL output.
 type Event struct {
-	Type     string      `json:"type"`
-	ThreadID string      `json:"thread_id"`
-	Message  string      `json:"message"`
-	Item     *Item       `json:"item"`
-	Usage    *Usage      `json:"usage"`
-	Error    *TurnError `json:"error"`
+	Type     string          `json:"type"`
+	ThreadID string          `json:"thread_id"`
+	Message  string          `json:"message"`
+	Item     *Item           `json:"item"`
+	Usage    *Usage          `json:"usage"`
+	Error    *TurnError      `json:"error"`
+	Info     *TokenCountInfo `json:"info"`
+}
+
+// TokenCountInfo is the body of a token_count event from `codex exec --json`.
+type TokenCountInfo struct {
+	LastTokenUsage  *Usage `json:"last_token_usage"`
+	TotalTokenUsage *Usage `json:"total_token_usage"`
 }
 
 // TurnError is the nested error object on turn.failed events.
@@ -60,11 +68,79 @@ type Item struct {
 }
 
 // Usage is the token accounting Codex reports when a turn finishes.
+// Raw keeps the original JSON so unknown fields survive a round-trip.
 type Usage struct {
-	InputTokens           int `json:"input_tokens"`
-	CachedInputTokens     int `json:"cached_input_tokens"`
-	OutputTokens          int `json:"output_tokens"`
-	ReasoningOutputTokens int `json:"reasoning_output_tokens"`
+	InputTokens           int             `json:"input_tokens"`
+	CachedInputTokens     int             `json:"cached_input_tokens"`
+	CacheWriteInputTokens int             `json:"cache_write_input_tokens"`
+	OutputTokens          int             `json:"output_tokens"`
+	ReasoningOutputTokens int             `json:"reasoning_output_tokens"`
+	TotalTokens           int             `json:"total_tokens"`
+	Raw                   json.RawMessage `json:"-"`
+}
+
+func (u *Usage) UnmarshalJSON(b []byte) error {
+	var plain struct {
+		InputTokens           int `json:"input_tokens"`
+		CachedInputTokens     int `json:"cached_input_tokens"`
+		CacheWriteInputTokens int `json:"cache_write_input_tokens"`
+		OutputTokens          int `json:"output_tokens"`
+		ReasoningOutputTokens int `json:"reasoning_output_tokens"`
+		TotalTokens           int `json:"total_tokens"`
+	}
+	if err := json.Unmarshal(b, &plain); err != nil {
+		return err
+	}
+	*u = Usage{
+		InputTokens:           plain.InputTokens,
+		CachedInputTokens:     plain.CachedInputTokens,
+		CacheWriteInputTokens: plain.CacheWriteInputTokens,
+		OutputTokens:          plain.OutputTokens,
+		ReasoningOutputTokens: plain.ReasoningOutputTokens,
+		TotalTokens:           plain.TotalTokens,
+		Raw:                   append(json.RawMessage(nil), b...),
+	}
+	return nil
+}
+
+func (u Usage) MarshalJSON() ([]byte, error) {
+	if len(u.Raw) > 0 {
+		return u.Raw, nil
+	}
+	type plain struct {
+		InputTokens           int `json:"input_tokens"`
+		CachedInputTokens     int `json:"cached_input_tokens"`
+		CacheWriteInputTokens int `json:"cache_write_input_tokens"`
+		OutputTokens          int `json:"output_tokens"`
+		ReasoningOutputTokens int `json:"reasoning_output_tokens"`
+		TotalTokens           int `json:"total_tokens"`
+	}
+	return json.Marshal(plain{
+		InputTokens:           u.InputTokens,
+		CachedInputTokens:     u.CachedInputTokens,
+		CacheWriteInputTokens: u.CacheWriteInputTokens,
+		OutputTokens:          u.OutputTokens,
+		ReasoningOutputTokens: u.ReasoningOutputTokens,
+		TotalTokens:           u.TotalTokens,
+	})
+}
+
+func (u Usage) populated() bool {
+	return u.InputTokens != 0 || u.CachedInputTokens != 0 || u.CacheWriteInputTokens != 0 ||
+		u.OutputTokens != 0 || u.ReasoningOutputTokens != 0 || u.TotalTokens != 0 || len(u.Raw) > 0
+}
+
+func eventUsage(ev Event) *Usage {
+	if ev.Usage != nil {
+		return ev.Usage
+	}
+	if ev.Type == EventTokenCount && ev.Info != nil {
+		if ev.Info.LastTokenUsage != nil {
+			return ev.Info.LastTokenUsage
+		}
+		return ev.Info.TotalTokenUsage
+	}
+	return nil
 }
 
 // IsMessage reports whether the item carries assistant-visible text.

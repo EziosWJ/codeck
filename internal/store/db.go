@@ -131,6 +131,12 @@ CREATE TABLE task_runs (
 CREATE INDEX idx_task_runs_task ON task_runs(task_id, id DESC);
 CREATE INDEX idx_task_runs_started ON task_runs(started_at DESC);
 `,
+	// 2–5: inbound-prompt include flags (Codex config.toml include_* keys).
+	// SQLite applies one statement per Exec, so each column is its own migration.
+	`ALTER TABLE profiles ADD COLUMN include_permissions_instructions INTEGER NOT NULL DEFAULT 0;`,
+	`ALTER TABLE profiles ADD COLUMN include_apps_instructions INTEGER NOT NULL DEFAULT 0;`,
+	`ALTER TABLE profiles ADD COLUMN include_collaboration_mode_instructions INTEGER NOT NULL DEFAULT 0;`,
+	`ALTER TABLE profiles ADD COLUMN include_environment_context INTEGER NOT NULL DEFAULT 0;`,
 }
 
 func (d *DB) migrate() error {

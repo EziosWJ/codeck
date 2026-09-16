@@ -58,6 +58,20 @@ func TestProfileCRUDAndValidation(t *testing.T) {
 	if p.ID == 0 || !p.IsMinimal || p.CreatedAt.IsZero() {
 		t.Fatalf("unexpected profile: %+v", p)
 	}
+	if p.IncludePermissionsInstructions || p.IncludeAppsInstructions ||
+		p.IncludeCollaborationModeInstructions || p.IncludeEnvironmentContext {
+		t.Fatalf("include flags should default off: %+v", p)
+	}
+	forced := Profile{
+		Name: "forced-minimal", SandboxMode: "read-only", IsMinimal: true,
+		IncludePermissionsInstructions: true, IncludeEnvironmentContext: true,
+	}
+	if err := forced.Validate(); err != nil {
+		t.Fatalf("minimal profile: %v", err)
+	}
+	if forced.IncludePermissionsInstructions || forced.IncludeEnvironmentContext {
+		t.Fatalf("minimal mode must clear include flags: %+v", forced)
+	}
 
 	if _, err := db.CreateProfile(Profile{Name: "minimal", SandboxMode: "read-only"}); err == nil {
 		t.Fatal("expected duplicate name to fail")
@@ -90,11 +104,12 @@ func TestProfileCRUDAndValidation(t *testing.T) {
 
 	p.Description = "updated"
 	p.IsMinimal = false
+	p.IncludeEnvironmentContext = true
 	got, err := db.UpdateProfile(p)
 	if err != nil {
 		t.Fatalf("UpdateProfile: %v", err)
 	}
-	if got.Description != "updated" || got.IsMinimal {
+	if got.Description != "updated" || got.IsMinimal || !got.IncludeEnvironmentContext {
 		t.Fatalf("update not applied: %+v", got)
 	}
 

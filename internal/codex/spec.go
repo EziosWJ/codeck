@@ -7,13 +7,17 @@ import "croncodex/internal/store"
 // how a profile turns into a CLI invocation.
 func SpecFromProfile(p store.Profile) ProfileSpec {
 	return ProfileSpec{
-		Name:            p.Name,
-		Model:           p.Model,
-		ReasoningEffort: p.ReasoningEffort,
-		SandboxMode:     p.SandboxMode,
-		ApprovalPolicy:  p.ApprovalPolicy,
-		ExtraConfig:     p.ExtraConfig,
-		WorkDir:         p.WorkDir,
-		IsMinimal:       p.IsMinimal,
+		Name:                                 p.Name,
+		Model:                                p.Model,
+		ReasoningEffort:                      p.ReasoningEffort,
+		SandboxMode:                          p.SandboxMode,
+		ApprovalPolicy:                       p.ApprovalPolicy,
+		ExtraConfig:                          p.ExtraConfig,
+		WorkDir:                              p.WorkDir,
+		IsMinimal:                            p.IsMinimal,
+		IncludePermissionsInstructions:       p.IncludePermissionsInstructions,
+		IncludeAppsInstructions:              p.IncludeAppsInstructions,
+		IncludeCollaborationModeInstructions: p.IncludeCollaborationModeInstructions,
+		IncludeEnvironmentContext:            p.IncludeEnvironmentContext,
 	}
 }

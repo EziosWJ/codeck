@@ -12,14 +12,18 @@ import (
 // CLI. It is deliberately decoupled from the database model so this package can
 // be tested without storage.
 type ProfileSpec struct {
-	Name            string
-	Model           string
-	ReasoningEffort string
-	SandboxMode     string
-	ApprovalPolicy  string
-	ExtraConfig     string
-	WorkDir         string
-	IsMinimal       bool
+	Name                                 string
+	Model                                string
+	ReasoningEffort                      string
+	SandboxMode                          string
+	ApprovalPolicy                       string
+	ExtraConfig                          string
+	WorkDir                              string
+	IsMinimal                            bool
+	IncludePermissionsInstructions       bool
+	IncludeAppsInstructions              bool
+	IncludeCollaborationModeInstructions bool
+	IncludeEnvironmentContext            bool
 }
 
 // SandboxOrDefault returns the sandbox mode, defaulting to read-only.
@@ -58,6 +62,7 @@ func (s ProfileSpec) ApprovalOrDefault() string {
 // disabled: Codex fails closed when it is off, which breaks the turn.
 var minimalFeatureDisables = []string{
 	"apps",
+	"plugins",
 	"browser_use",
 	"browser_use_external",
 	"browser_use_full_cdp_access",
@@ -88,10 +93,17 @@ func GenerateConfig(spec ProfileSpec) string {
 	// line, because `codex exec resume` accepts no -s flag and would otherwise
 	// fall back to a default sandbox for every follow-up turn.
 	b.WriteString("sandbox_mode = " + tomlString(spec.SandboxOrDefault()) + "\n")
+	perm, apps, collab, env := spec.includeFlags()
+	b.WriteString("include_permissions_instructions = " + tomlBool(perm) + "\n")
+	b.WriteString("include_apps_instructions = " + tomlBool(apps) + "\n")
+	b.WriteString("include_collaboration_mode_instructions = " + tomlBool(collab) + "\n")
+	b.WriteString("include_environment_context = " + tomlBool(env) + "\n")
 
 	if spec.IsMinimal {
-		b.WriteString("\n# Minimal mode: reduce per-request context to the essentials.\n")
-		b.WriteString("[features]\n")
+		b.WriteString("\n# Minimal mode: strip stuffed instructions and heavy features.\n")
+		b.WriteString("[skills]\n")
+		b.WriteString("include_instructions = false\n")
+		b.WriteString("\n[features]\n")
 		for _, f := range minimalFeatureDisables {
 			b.WriteString(f + " = false\n")
 		}
@@ -108,6 +120,23 @@ func GenerateConfig(spec ProfileSpec) string {
 // tomlString quotes a Go string as a TOML basic string. strconv.Quote already
 // emits the same escaping rules TOML expects for the characters we can receive.
 func tomlString(s string) string { return strconv.Quote(s) }
+
+func tomlBool(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
+// includeFlags returns the four Codex include_* keys. Minimal mode forces them
+// all off so the model does not receive permissions/apps/collab/env blocks.
+func (s ProfileSpec) includeFlags() (perm, apps, collab, env bool) {
+	if s.IsMinimal {
+		return false, false, false, false
+	}
+	return s.IncludePermissionsInstructions, s.IncludeAppsInstructions,
+		s.IncludeCollaborationModeInstructions, s.IncludeEnvironmentContext
+}
 
 // HomeDir is the CODEX_HOME directory for a profile.
 func (s *Service) HomeDir(name string) string {

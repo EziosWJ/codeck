@@ -180,8 +180,10 @@ func (s *Service) Run(ctx context.Context, opts RunOptions) (Result, error) {
 			}
 		case EventError:
 			emit(opts, Update{Kind: UpdateError, Message: eventErrorText(ev)})
-		case EventTurnCompleted:
-			usage = ev.Usage
+		case EventTurnCompleted, EventTokenCount:
+			if next := eventUsage(ev); next != nil {
+				usage = next
+			}
 		}
 	})
 
