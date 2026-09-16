@@ -22,28 +22,36 @@ func (s *Server) handleListProfiles(w http.ResponseWriter, r *http.Request) {
 // profileRequest is the accepted payload for creating and updating a profile.
 // It mirrors the profile fields a client is allowed to set.
 type profileRequest struct {
-	Name            string `json:"name"`
-	Description     string `json:"description"`
-	Model           string `json:"model"`
-	ReasoningEffort string `json:"reasoning_effort"`
-	SandboxMode     string `json:"sandbox_mode"`
-	ApprovalPolicy  string `json:"approval_policy"`
-	ExtraConfig     string `json:"extra_config"`
-	WorkDir         string `json:"work_dir"`
-	IsMinimal       bool   `json:"is_minimal"`
+	Name                                 string `json:"name"`
+	Description                          string `json:"description"`
+	Model                                string `json:"model"`
+	ReasoningEffort                      string `json:"reasoning_effort"`
+	SandboxMode                          string `json:"sandbox_mode"`
+	ApprovalPolicy                       string `json:"approval_policy"`
+	ExtraConfig                          string `json:"extra_config"`
+	WorkDir                              string `json:"work_dir"`
+	IsMinimal                            bool   `json:"is_minimal"`
+	IncludePermissionsInstructions       bool   `json:"include_permissions_instructions"`
+	IncludeAppsInstructions              bool   `json:"include_apps_instructions"`
+	IncludeCollaborationModeInstructions bool   `json:"include_collaboration_mode_instructions"`
+	IncludeEnvironmentContext            bool   `json:"include_environment_context"`
 }
 
 func (p profileRequest) toStore() store.Profile {
 	return store.Profile{
-		Name:            p.Name,
-		Description:     p.Description,
-		Model:           p.Model,
-		ReasoningEffort: p.ReasoningEffort,
-		SandboxMode:     p.SandboxMode,
-		ApprovalPolicy:  p.ApprovalPolicy,
-		ExtraConfig:     p.ExtraConfig,
-		WorkDir:         p.WorkDir,
-		IsMinimal:       p.IsMinimal,
+		Name:                                 p.Name,
+		Description:                          p.Description,
+		Model:                                p.Model,
+		ReasoningEffort:                      p.ReasoningEffort,
+		SandboxMode:                          p.SandboxMode,
+		ApprovalPolicy:                       p.ApprovalPolicy,
+		ExtraConfig:                          p.ExtraConfig,
+		WorkDir:                              p.WorkDir,
+		IsMinimal:                            p.IsMinimal,
+		IncludePermissionsInstructions:       p.IncludePermissionsInstructions,
+		IncludeAppsInstructions:              p.IncludeAppsInstructions,
+		IncludeCollaborationModeInstructions: p.IncludeCollaborationModeInstructions,
+		IncludeEnvironmentContext:            p.IncludeEnvironmentContext,
 	}
 }
 
@@ -187,20 +195,35 @@ func (s *Server) handleTestProfile(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	s.log.Info("testing profile", "profile", profile.Name, "minimal", profile.IsMinimal)
+	spec := codex.SpecFromProfile(profile)
 	result, runErr := s.codex.Run(ctx, codex.RunOptions{
-		Spec:    codex.SpecFromProfile(profile),
+		Spec:    spec,
 		Prompt:  prompt,
 		Timeout: s.cfg.DefaultTimeout + 30*time.Second,
 	})
 
+	usage := result.Usage
+	if sessUsage, ok, err := s.codex.LoadUsageFromSession(spec, result.ThreadID); err != nil {
+		s.log.Warn("could not load usage from session", "profile", profile.Name, "error", err)
+	} else if ok {
+		usage = sessUsage
+	}
+
 	resp := map[string]any{
-		"ok":            runErr == nil,
-		"output":        result.Output,
-		"error":         "",
-		"duration_ms":   result.Duration.Milliseconds(),
-		"input_tokens":  result.Usage.InputTokens,
-		"output_tokens": result.Usage.OutputTokens,
-		"thread_id":     result.ThreadID,
+		"ok":                  runErr == nil,
+		"output":              result.Output,
+		"error":               "",
+		"duration_ms":         result.Duration.Milliseconds(),
+		"input_tokens":        usage.InputTokens,
+		"cached_input_tokens": usage.CachedInputTokens,
+		"output_tokens":       usage.OutputTokens,
+		"thread_id":           result.ThreadID,
+		"usage":               usage,
+	}
+	if inbound, err := s.codex.LoadInboundFromSession(spec, result.ThreadID); err != nil {
+		s.log.Warn("could not load inbound prompt from session", "profile", profile.Name, "error", err)
+	} else if len(inbound.Blocks) > 0 {
+		resp["inbound"] = inbound
 	}
 	if runErr != nil {
 		resp["error"] = runErr.Error()
@@ -210,6 +233,44 @@ func (s *Server) handleTestProfile(w http.ResponseWriter, r *http.Request) {
 			"duration", result.Duration, "input_tokens", result.Usage.InputTokens)
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// handlePreviewProfilePrompt runs `codex debug prompt-input` for a profile.
+// It does not call the model.
+func (s *Server) handlePreviewProfilePrompt(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "id")
+	if !ok {
+		return
+	}
+	var req struct {
+		Prompt string `json:"prompt"`
+	}
+	if r.ContentLength > 0 {
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+	}
+	prompt := strings.TrimSpace(req.Prompt)
+	if prompt == "" {
+		prompt = "Reply with exactly: PONG"
+	}
+
+	profile, err := s.db.GetProfile(id)
+	if err != nil {
+		writeStoreError(w, err, "profile")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	s.log.Info("previewing inbound prompt", "profile", profile.Name)
+	inbound, err := s.codex.PreviewInbound(ctx, codex.SpecFromProfile(profile), prompt)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "%v", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, inbound)
 }
 
 // writeProfileError reports validation problems as 400s and everything else as

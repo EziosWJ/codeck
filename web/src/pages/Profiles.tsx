@@ -5,14 +5,15 @@ import {
   emptyProfile,
   getProfileConfig,
   listProfiles,
+  previewProfilePrompt,
   testProfile,
   updateProfile,
 } from '../api'
-import type { Profile, ProfileInput, ProfileTestResult } from '../api'
+import type { InboundPrompt, Profile, ProfileInput, ProfileTestResult } from '../api'
 import { errText } from '../api'
 import { useLoad } from '../useLoad'
 import { Empty, ErrorBox, Field, Modal, Spinner } from '../components/ui'
-import { formatDuration, formatTs, labelOf, text, tokenSummary } from '../format'
+import { formatDuration, formatTs, formatUsage, labelOf, text, tokenSummary } from '../format'
 
 const EFFORTS = [
   { value: 'low', label: '低' },
@@ -214,6 +215,12 @@ function ProfileForm({
           extra_config: profile.extra_config ?? '',
           work_dir: profile.work_dir ?? '',
           is_minimal: Boolean(profile.is_minimal),
+          include_permissions_instructions: Boolean(profile.include_permissions_instructions),
+          include_apps_instructions: Boolean(profile.include_apps_instructions),
+          include_collaboration_mode_instructions: Boolean(
+            profile.include_collaboration_mode_instructions,
+          ),
+          include_environment_context: Boolean(profile.include_environment_context),
         }
       : emptyProfile(),
   )
@@ -289,15 +296,57 @@ function ProfileForm({
         <input
           type="checkbox"
           checked={form.is_minimal}
-          onChange={(e) => set('is_minimal', e.target.checked)}
+          onChange={(e) => {
+            const on = e.target.checked
+            setForm((prev) => ({
+              ...prev,
+              is_minimal: on,
+              ...(on
+                ? {
+                    include_permissions_instructions: false,
+                    include_apps_instructions: false,
+                    include_collaboration_mode_instructions: false,
+                    include_environment_context: false,
+                  }
+                : {}),
+            }))
+          }}
         />
         <span>
           <span className="checkbox-title">精简模式</span>
           <span className="hint">
-            关闭 MCP、skills、项目上下文和重型工具，请求上下文更小、更稳定。适合定时任务和一次性短提示；需要仓库工具时请关闭。
+            关闭权限 / Apps / 协作模式 / 环境上下文注入，并设置 [skills] include_instructions
+            = false。同时关掉一批重型 feature。适合定时任务和短提示。
           </span>
         </span>
       </label>
+
+      <div className="hint" style={{ margin: '4px 0 8px' }}>
+        {form.is_minimal
+          ? '精简模式已强制关闭下列四项。取消精简模式后可单独打开。'
+          : '注入到模型的说明（写入 config.toml 的 include_*）。关闭后对应块不会塞进请求。'}
+      </div>
+      {(
+        [
+          ['include_permissions_instructions', '权限说明', 'sandbox / 批准策略等 permissions instructions'],
+          ['include_apps_instructions', 'Apps 说明', '已安装 Apps 的使用说明'],
+          ['include_collaboration_mode_instructions', '协作模式说明', 'commentary / final 通道等协作指令'],
+          ['include_environment_context', '环境上下文', 'cwd、shell、日期等 environment_context'],
+        ] as const
+      ).map(([key, title, hint]) => (
+        <label key={key} className={form[key] ? 'checkbox-row on' : 'checkbox-row'}>
+          <input
+            type="checkbox"
+            checked={form[key]}
+            disabled={form.is_minimal}
+            onChange={(e) => set(key, e.target.checked)}
+          />
+          <span>
+            <span className="checkbox-title">{title}</span>
+            <span className="hint">{hint}</span>
+          </span>
+        </label>
+      ))}
 
       <div className="form-grid">
         <Field label="模型" hint="留空则使用 Codex 默认模型。">
@@ -407,8 +456,12 @@ function ConfigModal({ profile, onClose }: { profile: Profile; onClose: () => vo
 function TestModal({ profile, onClose }: { profile: Profile; onClose: () => void }) {
   const [prompt, setPrompt] = useState('Reply with the single word: ok')
   const [running, setRunning] = useState(false)
+  const [previewing, setPreviewing] = useState(false)
   const [result, setResult] = useState<ProfileTestResult | null>(null)
+  const [preview, setPreview] = useState<InboundPrompt | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const busy = running || previewing
 
   async function run() {
     setRunning(true)
@@ -423,6 +476,21 @@ function TestModal({ profile, onClose }: { profile: Profile; onClose: () => void
     }
   }
 
+  async function previewInbound() {
+    setPreviewing(true)
+    setError(null)
+    setPreview(null)
+    try {
+      setPreview(await previewProfilePrompt(profile.id, prompt))
+    } catch (e) {
+      setError(errText(e))
+    } finally {
+      setPreviewing(false)
+    }
+  }
+
+  const inbound = result?.inbound ?? preview
+
   return (
     <Modal
       title={`测试档案：${profile.name || `#${profile.id}`}`}
@@ -435,9 +503,17 @@ function TestModal({ profile, onClose }: { profile: Profile; onClose: () => void
           </button>
           <button
             type="button"
+            className="btn"
+            onClick={() => void previewInbound()}
+            disabled={busy}
+          >
+            {previewing ? '预览中…' : '预览入站提示'}
+          </button>
+          <button
+            type="button"
             className="btn primary"
             onClick={() => void run()}
-            disabled={running}
+            disabled={busy}
           >
             {running ? '运行中…' : '开始测试'}
           </button>
@@ -445,7 +521,7 @@ function TestModal({ profile, onClose }: { profile: Profile; onClose: () => void
       }
     >
       <div className="hint" style={{ marginBottom: 12 }}>
-        用此档案真实调用一次 Codex，大约需要 10–60 秒。
+        「开始测试」会真实调用 Codex。「预览入站提示」只跑 debug prompt-input，不消耗模型。
       </div>
 
       <Field label="提示词">
@@ -453,7 +529,7 @@ function TestModal({ profile, onClose }: { profile: Profile; onClose: () => void
           className="textarea"
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          disabled={running}
+          disabled={busy}
         />
       </Field>
 
@@ -461,6 +537,8 @@ function TestModal({ profile, onClose }: { profile: Profile; onClose: () => void
 
       {running ? (
         <Spinner label="等待 Codex… 最多可能需要一分钟。" />
+      ) : previewing ? (
+        <Spinner label="正在组装入站提示…" />
       ) : result ? (
         <div>
           <div className="toolbar" style={{ marginBottom: 10 }}>
@@ -469,15 +547,77 @@ function TestModal({ profile, onClose }: { profile: Profile; onClose: () => void
             </span>
             <span className="small dim">耗时 {formatDuration(result.duration_ms)}</span>
             <span className="small dim">
-              {tokenSummary(result.input_tokens, result.output_tokens) || '无 token 用量'}
+              {formatUsage(result.usage ?? undefined) ||
+                tokenSummary(
+                  result.input_tokens,
+                  result.output_tokens,
+                  result.cached_input_tokens,
+                ) ||
+                '无 token 用量'}
             </span>
           </div>
           {result.error ? (
             <div className="error-box">{result.error}</div>
           ) : null}
           <pre className="pre">{result.output?.trim() ? result.output : '（无输出）'}</pre>
+          {result.inbound ? <InboundView inbound={result.inbound} /> : null}
+          {preview && preview !== result.inbound ? <InboundView inbound={preview} /> : null}
         </div>
+      ) : inbound ? (
+        <InboundView inbound={inbound} />
       ) : null}
     </Modal>
+  )
+}
+
+const INBOUND_KIND_LABEL: Record<string, string> = {
+  skills: 'Skills',
+  permissions: '权限说明',
+  apps: 'Apps',
+  plugins: '插件说明',
+  plugin_recommendations: '推荐插件',
+  environment: '环境',
+  user: '你的提示词',
+  other: '其他',
+}
+
+function InboundView({ inbound }: { inbound: InboundPrompt }) {
+  const settings = inbound.settings
+  const raw = JSON.stringify(inbound.blocks, null, 2)
+  return (
+    <div className="inbound">
+      <div className="inbound-head">
+        <div className="card-title">入站提示</div>
+        <span className="small faint">
+          {inbound.source === 'session' ? '来自本次 session' : '来自 debug prompt-input'}
+          {inbound.thread_id ? ` · ${inbound.thread_id.slice(0, 12)}` : ''}
+        </span>
+      </div>
+      {settings && (settings.model || settings.effort || settings.sandbox || settings.approval_policy) ? (
+        <div className="small dim" style={{ marginBottom: 8 }}>
+          {[
+            settings.model,
+            settings.effort ? `effort=${settings.effort}` : '',
+            settings.sandbox,
+            settings.approval_policy,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </div>
+      ) : null}
+      {inbound.blocks.map((block, index) => (
+        <details key={`${block.kind}-${index}`} className="fold" open={block.kind === 'user'}>
+          <summary>
+            {INBOUND_KIND_LABEL[block.kind] ?? block.kind}
+            <span className="small faint"> · {block.text.length} 字</span>
+          </summary>
+          <pre className="pre">{block.text}</pre>
+        </details>
+      ))}
+      <details className="fold">
+        <summary>原始 JSON</summary>
+        <pre className="pre">{raw}</pre>
+      </details>
+    </div>
   )
 }

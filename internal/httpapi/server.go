@@ -66,6 +66,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/profiles/{id}", s.handleDeleteProfile)
 	mux.HandleFunc("GET /api/profiles/{id}/config", s.handleProfileConfig)
 	mux.HandleFunc("POST /api/profiles/{id}/test", s.handleTestProfile)
+	mux.HandleFunc("POST /api/profiles/{id}/prompt-preview", s.handlePreviewProfilePrompt)
 
 	mux.HandleFunc("GET /api/conversations", s.handleListConversations)
 	mux.HandleFunc("POST /api/conversations", s.handleCreateConversation)

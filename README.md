@@ -10,6 +10,7 @@ UI 品牌名 Codex Control。默认 `:8080`，数据 `./data/`。
 
 - 发布目标：`CGO_ENABLED=0` 静态二进制，UI 经 `//go:embed all:web/dist` 打进 `main.go`。先 `task build:web` 再 `go build`。
 - 集成测试花 token：`CRONCODEX_INTEGRATION=1 go test -count=1 -v -run TestIntegrationRealCodex ./internal/codex/`
+- 探测 App Server 账号接口：`task appserver-probe`（打印 `account/read`、`account/rateLimits/read`、`account/usage/read` 的原始 JSON）
 
 ## 布局
 
@@ -43,7 +44,8 @@ data/                   db、每 Profile 的 CODEX_HOME 与 workspace
 - 并发默认 4（`MAX_CONCURRENT_RUNS`）。默认超时 5 分钟。轮询默认 10 秒。
 - 启动把上次留下的 `running` 任务和聊天回复标失败。
 - 调用：`codex exec --json --skip-git-repo-check`，prompt 走 stdin（`-`）。续聊 `exec resume --json <thread_id> -`（resume 无 `-s`，sandbox 靠生成的 config.toml）。超时杀进程组。
-- Profile `name`：`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`。显式默认：`sandbox_mode=read-only`、`approval_policy=never`、`reasoning_effort=low`（无空「默认」项；effort 不含 none/minimal）。minimal 模式关一批重功能，且不能配 `danger-full-access`。
+- App Server：进程随服务启动 `codex app-server --listen stdio://`，stdin/stdout 走 JSON-RPC JSONL（无 `jsonrpc` 版本字段），先 `initialize` 再 `initialized`。服务退出时关掉子进程。
+- Profile `name`：`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`。显式默认：`sandbox_mode=read-only`、`approval_policy=never`、`reasoning_effort=low`。`include_*` 四项默认 `false`。精简模式强制这四项为 false，并写 `[skills] include_instructions = false`，再关一批重型 feature；不能配 `danger-full-access`。
 - SQLite 单连接、WAL、纯 Go 驱动（`modernc.org/sqlite`）。时间存 UTC RFC3339Nano。
 - 删 Profile CASCADE 其对话与任务，并删对应 home/workspace。
 
@@ -60,8 +62,8 @@ data/                   db、每 Profile 的 CODEX_HOME 与 workspace
 全在 `/api`。JSON；未知字段拒绝。聊天为 POST SSE。前端路由刷新回退 `index.html`。
 
 ```
-GET  /health  /dashboard  /history  /runs
-CRUD /profiles  GET /profiles/{id}/config  POST /profiles/{id}/test
+GET  /health  /dashboard  /account  /history  /runs
+CRUD /profiles  GET /profiles/{id}/config  POST /profiles/{id}/test  POST /profiles/{id}/prompt-preview
 CRUD /conversations  PATCH /conversations/{id}
 POST /chat/stream
 CRUD /tasks  POST /tasks/{id}/run  GET /tasks/{id}/runs
