@@ -56,14 +56,97 @@ export function formatTokens(n: number | null | undefined): string {
   return String(n)
 }
 
+/** Compact Chinese counts for large token totals: 151万, 3.02亿. */
+export function formatCompact(n: number | null | undefined): string {
+  if (!isNum(n)) return DASH
+  const sign = n < 0 ? '-' : ''
+  const abs = Math.abs(n)
+  if (abs >= 1e8) return `${sign}${trimFloat(abs / 1e8)}亿`
+  if (abs >= 1e4) return `${sign}${trimFloat(abs / 1e4)}万`
+  return sign + String(Math.round(abs))
+}
+
+function trimFloat(n: number): string {
+  const digits = n >= 100 ? 0 : n >= 10 ? 1 : 2
+  return n.toFixed(digits).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')
+}
+
+/** Unix seconds → "3小时后". */
+export function formatUnixRelative(sec: number | null | undefined): string {
+  if (!isNum(sec) || sec <= 0) return DASH
+  return formatRelative(new Date(sec * 1000).toISOString())
+}
+
+/** Unix seconds → "2026-09-16". */
+export function formatUnixDate(sec: number | null | undefined): string {
+  if (!isNum(sec) || sec <= 0) return DASH
+  const d = new Date(sec * 1000)
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+/** Rate-limit window length from minutes. */
+export function formatWindowMins(mins: number | null | undefined): string {
+  if (!isNum(mins) || mins <= 0) return DASH
+  if (mins % (24 * 60) === 0) {
+    const days = mins / (24 * 60)
+    return days === 1 ? '1 天' : `${days} 天`
+  }
+  if (mins % 60 === 0) {
+    const hours = mins / 60
+    return hours === 1 ? '1 小时' : `${hours} 小时`
+  }
+  return `${mins} 分钟`
+}
+
 export function tokenSummary(
   input: number | null | undefined,
   output: number | null | undefined,
+  cached?: number | null | undefined,
 ): string {
   const hasIn = isNum(input)
   const hasOut = isNum(output)
-  if (!hasIn && !hasOut) return ''
-  return `入 ${hasIn ? input : 0} / 出 ${hasOut ? output : 0}`
+  const hasCached = isNum(cached)
+  if (!hasIn && !hasOut && !hasCached) return ''
+  const parts = [`入 ${hasIn ? input : 0}`]
+  if (hasCached) parts.push(`缓存入 ${cached}`)
+  parts.push(`出 ${hasOut ? output : 0}`)
+  return parts.join(' / ')
+}
+
+const USAGE_LABELS: Record<string, string> = {
+  input_tokens: '入',
+  cached_input_tokens: '缓存入',
+  cache_write_input_tokens: '写入缓存',
+  output_tokens: '出',
+  reasoning_output_tokens: '推理出',
+  total_tokens: '合计',
+}
+
+const USAGE_ORDER = [
+  'input_tokens',
+  'cached_input_tokens',
+  'cache_write_input_tokens',
+  'output_tokens',
+  'reasoning_output_tokens',
+  'total_tokens',
+] as const
+
+/** Render every numeric field on a Codex usage object. */
+export function formatUsage(u: Record<string, unknown> | null | undefined): string {
+  if (!u) return ''
+  const seen = new Set<string>()
+  const parts: string[] = []
+  for (const key of USAGE_ORDER) {
+    const n = u[key]
+    if (!isNum(n)) continue
+    parts.push(`${USAGE_LABELS[key]} ${n}`)
+    seen.add(key)
+  }
+  for (const [key, n] of Object.entries(u)) {
+    if (seen.has(key) || !isNum(n)) continue
+    parts.push(`${key} ${n}`)
+  }
+  return parts.join(' / ')
 }
 
 /** Chinese labels for API enums shown in the UI. Unknown values pass through. */
@@ -98,6 +181,18 @@ const LABELS: Record<string, string> = {
   'on-failure': '失败时批准',
   'on-request': '请求时批准',
   never: '从不批准',
+  plus: 'Plus',
+  pro: 'Pro',
+  free: '免费',
+  go: 'Go',
+  prolite: 'Pro Lite',
+  team: 'Team',
+  business: 'Business',
+  enterprise: 'Enterprise',
+  edu: 'Edu',
+  chatgpt: 'ChatGPT',
+  apiKey: 'API Key',
+  amazonBedrock: 'Bedrock',
 }
 
 export function labelOf(value: string | null | undefined): string {

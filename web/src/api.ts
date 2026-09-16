@@ -86,6 +86,10 @@ export interface Profile {
   extra_config: string
   work_dir: string
   is_minimal: boolean
+  include_permissions_instructions: boolean
+  include_apps_instructions: boolean
+  include_collaboration_mode_instructions: boolean
+  include_environment_context: boolean
   created_at: string
   updated_at: string
 }
@@ -101,6 +105,10 @@ export interface ProfileInput {
   extra_config: string
   work_dir: string
   is_minimal: boolean
+  include_permissions_instructions: boolean
+  include_apps_instructions: boolean
+  include_collaboration_mode_instructions: boolean
+  include_environment_context: boolean
 }
 
 export function emptyProfile(): ProfileInput {
@@ -114,7 +122,51 @@ export function emptyProfile(): ProfileInput {
     extra_config: '',
     work_dir: '',
     is_minimal: false,
+    include_permissions_instructions: false,
+    include_apps_instructions: false,
+    include_collaboration_mode_instructions: false,
+    include_environment_context: false,
   }
+}
+
+export type InboundKind =
+  | 'skills'
+  | 'permissions'
+  | 'apps'
+  | 'plugins'
+  | 'plugin_recommendations'
+  | 'environment'
+  | 'user'
+  | 'other'
+
+export interface InboundBlock {
+  kind: InboundKind | string
+  role: string
+  text: string
+}
+
+export interface InboundSettings {
+  model?: string
+  effort?: string
+  approval_policy?: string
+  sandbox?: string
+}
+
+export interface InboundPrompt {
+  source: 'session' | 'prompt-input' | string
+  thread_id?: string
+  blocks: InboundBlock[]
+  settings?: InboundSettings | null
+}
+
+export interface TokenUsage {
+  input_tokens?: number
+  cached_input_tokens?: number
+  cache_write_input_tokens?: number
+  output_tokens?: number
+  reasoning_output_tokens?: number
+  total_tokens?: number
+  [key: string]: number | undefined
 }
 
 export interface ProfileTestResult {
@@ -123,7 +175,11 @@ export interface ProfileTestResult {
   error: string
   duration_ms: number | null
   input_tokens: number | null
+  cached_input_tokens?: number | null
   output_tokens: number | null
+  thread_id?: string
+  usage?: TokenUsage | null
+  inbound?: InboundPrompt | null
 }
 
 export interface Conversation {
@@ -217,6 +273,70 @@ export interface DashboardData {
   recent_conversations: Conversation[]
 }
 
+export interface RateLimitWindow {
+  usedPercent: number
+  windowDurationMins: number | null
+  resetsAt: number | null
+}
+
+export interface RateLimitSnapshot {
+  limitId?: string | null
+  primary: RateLimitWindow | null
+  secondary: RateLimitWindow | null
+  credits: {
+    hasCredits: boolean
+    unlimited: boolean
+    balance: string | null
+  } | null
+  planType: string | null
+}
+
+export interface AccountRead {
+  account: {
+    type?: string
+    email?: string | null
+    planType?: string
+  } | null
+  requiresOpenaiAuth: boolean
+}
+
+export interface RateLimitResetCredit {
+  id: string
+  status?: string
+  grantedAt?: number
+  expiresAt: number | null
+  title: string | null
+}
+
+export interface AccountRateLimits {
+  ordinaryUsageAllowed: boolean | null
+  rateLimits: RateLimitSnapshot | null
+  rateLimitResetCredits: {
+    availableCount: number
+    credits: RateLimitResetCredit[] | null
+  } | null
+  accountId: string | null
+}
+
+export interface AccountUsage {
+  summary: {
+    lifetimeTokens: number | null
+    peakDailyTokens: number | null
+    longestRunningTurnSec: number | null
+    currentStreakDays: number | null
+    longestStreakDays: number | null
+  }
+  dailyUsageBuckets: { startDate: string; tokens: number }[] | null
+}
+
+export interface AccountData {
+  ok: boolean
+  error?: string
+  account: AccountRead | null
+  rate_limits: AccountRateLimits | null
+  usage: AccountUsage | null
+}
+
 export interface HistoryData {
   messages: Message[]
   runs: TaskRun[]
@@ -226,6 +346,7 @@ export interface HistoryData {
 
 export const getHealth = () => request<Health>('/health')
 export const getDashboard = () => request<DashboardData>('/dashboard')
+export const getAccount = () => request<AccountData>('/account')
 
 export const listProfiles = () => request<Profile[]>('/profiles')
 export const createProfile = (p: ProfileInput) => request<Profile>('/profiles', body(p))
@@ -237,6 +358,8 @@ export const getProfileConfig = (id: number) =>
   request<{ config_toml: string }>(`/profiles/${id}/config`)
 export const testProfile = (id: number, prompt?: string) =>
   request<ProfileTestResult>(`/profiles/${id}/test`, body({ prompt: prompt ?? '' }))
+export const previewProfilePrompt = (id: number, prompt?: string) =>
+  request<InboundPrompt>(`/profiles/${id}/prompt-preview`, body({ prompt: prompt ?? '' }))
 
 export const listConversations = () => request<Conversation[]>('/conversations')
 export const createConversation = (profileId: number, title?: string) =>

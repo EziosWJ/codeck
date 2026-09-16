@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -48,6 +49,7 @@ func main() {
 func run() error {
 	configPath := flag.String("config", "", "path to a KEY=VALUE config file (optional)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
+	probeAppServer := flag.Bool("appserver-probe", false, "start Codex App Server, print account JSON, and exit")
 	flag.Parse()
 
 	if *showVersion {
@@ -59,12 +61,17 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	if err := cfg.EnsureDirs(); err != nil {
-		return err
-	}
 
 	log := newLogger(cfg.LogLevel)
 	slog.SetDefault(log)
+
+	if *probeAppServer {
+		return runAppServerProbe(cfg, log)
+	}
+
+	if err := cfg.EnsureDirs(); err != nil {
+		return err
+	}
 
 	log.Info("starting croncodex",
 		"version", version, "addr", cfg.Addr, "data_dir", cfg.DataDir, "db", cfg.DBPath)
@@ -114,6 +121,22 @@ func run() error {
 	log.Info("profiles are isolated per-CODEX_HOME",
 		"codex_home_root", cfg.CodexHomeRoot, "auth_source", cfg.AuthSource)
 
+	appServer, err := codex.StartAppServer(ctx, codex.AppServerOptions{
+		Bin:           cfg.CodexBin,
+		ClientVersion: version,
+		Log:           log.With("component", "app-server"),
+	})
+	if err != nil {
+		log.Warn("codex app-server failed to start; account APIs will be unavailable",
+			"bin", cfg.CodexBin, "error", err)
+	} else {
+		defer func() {
+			if err := appServer.Close(); err != nil {
+				log.Warn("codex app-server did not shut down cleanly", "error", err)
+			}
+		}()
+	}
+
 	sched := scheduler.New(db, codexService, cfg.SchedulerInterval, cfg.MaxConcurrentRuns,
 		log.With("component", "scheduler"))
 	sched.Start(ctx)
@@ -123,7 +146,7 @@ func run() error {
 		return err
 	}
 
-	api := httpapi.NewServer(cfg, db, codexService, sched, log.With("component", "http"), version, static)
+	api := httpapi.NewServer(cfg, db, codexService, sched, appServer, log.With("component", "http"), version, static)
 
 	srv := &http.Server{
 		Addr:    cfg.Addr,
@@ -158,6 +181,58 @@ func run() error {
 	}
 	sched.Stop()
 	log.Info("stopped")
+	return nil
+}
+
+// runAppServerProbe starts a short-lived App Server, prints the raw JSON of
+// the three account methods, and exits. It is the debug entry for the JSON-RPC
+// wiring and does not start the HTTP server or scheduler.
+func runAppServerProbe(cfg config.Config, log *slog.Logger) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	appServer, err := codex.StartAppServer(ctx, codex.AppServerOptions{
+		Bin:           cfg.CodexBin,
+		ClientVersion: version,
+		Log:           log.With("component", "app-server"),
+	})
+	if err != nil {
+		return err
+	}
+	defer appServer.Close()
+
+	type call struct {
+		name string
+		fn   func(context.Context) (json.RawMessage, error)
+	}
+	calls := []call{
+		{"account/read", appServer.AccountRead},
+		{"account/rateLimits/read", appServer.AccountRateLimitsRead},
+		{"account/usage/read", appServer.AccountUsageRead},
+	}
+
+	var failed int
+	for _, c := range calls {
+		callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		raw, err := c.fn(callCtx)
+		cancel()
+
+		fmt.Printf("=== %s ===\n", c.name)
+		if err != nil {
+			failed++
+			fmt.Printf("error: %v\n\n", err)
+			continue
+		}
+		pretty, indentErr := json.MarshalIndent(raw, "", "  ")
+		if indentErr != nil {
+			fmt.Printf("%s\n\n", raw)
+			continue
+		}
+		fmt.Printf("%s\n\n", pretty)
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d account method(s) failed", failed)
+	}
 	return nil
 }
 

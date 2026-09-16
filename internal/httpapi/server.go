@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"croncodex/internal/codex"
@@ -24,22 +25,28 @@ const maxBodyBytes = 1 << 20
 
 // Server holds the dependencies shared by all handlers.
 type Server struct {
-	cfg     config.Config
-	db      *store.DB
-	codex   *codex.Service
-	sched   *scheduler.Scheduler
-	log     *slog.Logger
-	version string
-	static  fs.FS
-	started time.Time
+	cfg       config.Config
+	db        *store.DB
+	codex     *codex.Service
+	appServer *codex.AppServer
+	sched     *scheduler.Scheduler
+	log       *slog.Logger
+	version   string
+	static    fs.FS
+	started   time.Time
+
+	accountMu       sync.Mutex
+	accountCached   accountSnapshot
+	accountCachedAt time.Time
 }
 
 // NewServer wires the HTTP layer. static may be nil, in which case the API is
 // served without a web UI (handy for tests and for running the API alone).
+// appServer may be nil when Codex App Server failed to start.
 func NewServer(cfg config.Config, db *store.DB, svc *codex.Service, sched *scheduler.Scheduler,
-	log *slog.Logger, version string, static fs.FS) *Server {
+	appServer *codex.AppServer, log *slog.Logger, version string, static fs.FS) *Server {
 	return &Server{
-		cfg: cfg, db: db, codex: svc, sched: sched,
+		cfg: cfg, db: db, codex: svc, sched: sched, appServer: appServer,
 		log: log, version: version, static: static,
 		started: time.Now(),
 	}
@@ -51,6 +58,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/health", s.handleHealth)
 	mux.HandleFunc("GET /api/dashboard", s.handleDashboard)
+	mux.HandleFunc("GET /api/account", s.handleAccount)
 
 	mux.HandleFunc("GET /api/profiles", s.handleListProfiles)
 	mux.HandleFunc("POST /api/profiles", s.handleCreateProfile)

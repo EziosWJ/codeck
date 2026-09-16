@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getDashboard, getHealth } from '../api'
+import { getAccount, getDashboard, getHealth } from '../api'
 import type { Conversation, TaskRun } from '../api'
 import { useLoad } from '../useLoad'
+import { QuotaPanel } from '../components/Quota'
 import { Empty, ErrorBox, Spinner, StatusBadge } from '../components/ui'
 import {
   formatDuration,
@@ -19,18 +20,21 @@ const REFRESH_MS = 10_000
 export default function Dashboard() {
   const health = useLoad(getHealth)
   const overview = useLoad(getDashboard)
+  const account = useLoad(getAccount)
   const [lastLoaded, setLastLoaded] = useState<string | null>(null)
 
   const reload = overview.reload
   const reloadHealth = health.reload
+  const reloadAccount = account.reload
 
   useEffect(() => {
     const timer = setInterval(() => {
       reloadHealth()
       reload()
+      reloadAccount()
     }, REFRESH_MS)
     return () => clearInterval(timer)
-  }, [reload, reloadHealth])
+  }, [reload, reloadHealth, reloadAccount])
 
   useEffect(() => {
     if (overview.data) setLastLoaded(new Date().toISOString())
@@ -42,7 +46,7 @@ export default function Dashboard() {
         <div>
           <h1 className="page-title">总览</h1>
           <div className="page-desc">
-            Codex 运行状态，每 {REFRESH_MS / 1000} 秒刷新
+            账号额度与运行状态，每 {REFRESH_MS / 1000} 秒刷新
             {lastLoaded ? ` · 更新于 ${formatTs(lastLoaded)}` : ''}
           </div>
         </div>
@@ -52,8 +56,9 @@ export default function Dashboard() {
           onClick={() => {
             reloadHealth()
             reload()
+            reloadAccount()
           }}
-          disabled={overview.loading || health.loading}
+          disabled={overview.loading || health.loading || account.loading}
         >
           立即刷新
         </button>
@@ -61,6 +66,15 @@ export default function Dashboard() {
 
       <ErrorBox error={health.error} />
       <ErrorBox error={overview.error} />
+
+      <div className="card">
+        <div className="card-head">
+          <div className="card-title">账号额度</div>
+        </div>
+        <div className="card-body">
+          <QuotaPanel data={account.data} loading={account.loading} error={account.error} />
+        </div>
+      </div>
 
       <div className="card">
         <div className="card-head">
@@ -118,27 +132,29 @@ export default function Dashboard() {
         <Tile label="今日运行" value={overview.data?.counts.runs_today} to="/history" />
       </div>
 
-      <div className="card">
-        <div className="card-head">
-          <div className="card-title">最近任务运行</div>
-          <Link className="small" to="/history">
-            查看全部
-          </Link>
+      <div className="grid grid-2">
+        <div className="card">
+          <div className="card-head">
+            <div className="card-title">最近任务运行</div>
+            <Link className="small" to="/history">
+              查看全部
+            </Link>
+          </div>
+          <RecentRuns runs={overview.data?.recent_runs} loading={overview.loading} />
         </div>
-        <RecentRuns runs={overview.data?.recent_runs} loading={overview.loading} />
-      </div>
 
-      <div className="card">
-        <div className="card-head">
-          <div className="card-title">最近对话</div>
-          <Link className="small" to="/chat">
-            打开对话
-          </Link>
+        <div className="card">
+          <div className="card-head">
+            <div className="card-title">最近对话</div>
+            <Link className="small" to="/chat">
+              打开对话
+            </Link>
+          </div>
+          <RecentConversations
+            items={overview.data?.recent_conversations}
+            loading={overview.loading}
+          />
         </div>
-        <RecentConversations
-          items={overview.data?.recent_conversations}
-          loading={overview.loading}
-        />
       </div>
     </div>
   )

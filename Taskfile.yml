@@ -113,6 +113,11 @@ tasks:
     cmds:
       - CRONCODEX_INTEGRATION=1 go test -count=1 -v -run TestIntegrationRealCodex ./internal/codex/
 
+  appserver-probe:
+    desc: Start Codex App Server and print account/read, rateLimits, usage JSON
+    cmds:
+      - go run . -appserver-probe
+
   lint:
     desc: Static checks for Go and TypeScript
     cmds:
