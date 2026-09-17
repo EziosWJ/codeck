@@ -164,7 +164,12 @@ tasks:
 
   check:
     desc: Everything CI would run
-    deps: [build:web, lint, test]
+    # lint/test compile main.go, which embeds web/dist. Task runs deps in
+    # parallel, so these must be sequential or go vet loses the race.
+    cmds:
+      - task: build:web
+      - task: lint
+      - task: test
 
   clean:
     desc: Remove build output (node_modules is left alone)
