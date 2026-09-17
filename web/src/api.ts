@@ -344,9 +344,114 @@ export interface HistoryData {
 
 /* --------------------------------------------------------------- REST API */
 
+export interface UsageTotals {
+  turns: number
+  input_tokens: number
+  cached_tokens: number
+  uncached_tokens: number
+  cache_write_tokens: number
+  output_tokens: number
+  reasoning_tokens: number
+  total_tokens: number
+  usd: number | null
+  unpriced_turns: number
+  unpriced_tokens: number
+}
+
+export interface UsageModelRow extends UsageTotals {
+  model: string
+  matched_by?: string
+  priced: boolean
+  wildcard: boolean
+  long_turns: number
+}
+
+export interface UsageDayModel {
+  model: string
+  tokens: number
+  usd: number | null
+}
+
+export interface UsageDayRow {
+  date: string
+  tokens: number
+  usd: number | null
+  models: UsageDayModel[]
+}
+
+export interface UsageReport {
+  scanned_at: string
+  roots: string[]
+  files: number
+  turns: number
+  errors?: string[]
+  summary: UsageTotals
+  by_model: UsageModelRow[]
+  daily: UsageDayRow[]
+}
+
+export interface ModelPrice {
+  id: number
+  pattern: string
+  input_usd_per_mtok: number
+  cached_input_usd_per_mtok: number
+  cache_write_usd_per_mtok: number
+  output_usd_per_mtok: number
+  long_input_usd_per_mtok: number | null
+  long_cached_input_usd_per_mtok: number | null
+  long_cache_write_usd_per_mtok: number | null
+  long_output_usd_per_mtok: number | null
+  long_threshold_tokens: number
+  priority: number
+  notes: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ModelPriceInput {
+  pattern: string
+  input_usd_per_mtok: number
+  cached_input_usd_per_mtok: number
+  cache_write_usd_per_mtok: number
+  output_usd_per_mtok: number
+  long_input_usd_per_mtok: number | null
+  long_cached_input_usd_per_mtok: number | null
+  long_cache_write_usd_per_mtok: number | null
+  long_output_usd_per_mtok: number | null
+  long_threshold_tokens: number
+  priority: number
+  notes: string
+}
+
+export function emptyPrice(): ModelPriceInput {
+  return {
+    pattern: '',
+    input_usd_per_mtok: 0,
+    cached_input_usd_per_mtok: 0,
+    cache_write_usd_per_mtok: 0,
+    output_usd_per_mtok: 0,
+    long_input_usd_per_mtok: null,
+    long_cached_input_usd_per_mtok: null,
+    long_cache_write_usd_per_mtok: null,
+    long_output_usd_per_mtok: null,
+    long_threshold_tokens: 272000,
+    priority: 100,
+    notes: '',
+  }
+}
+
 export const getHealth = () => request<Health>('/health')
 export const getDashboard = () => request<DashboardData>('/dashboard')
 export const getAccount = () => request<AccountData>('/account')
+export const getUsage = (refresh = false) =>
+  request<UsageReport>(`/usage${refresh ? '?refresh=1' : ''}`)
+export const listPrices = () => request<ModelPrice[]>('/prices')
+export const createPrice = (p: ModelPriceInput) => request<ModelPrice>('/prices', body(p))
+export const updatePrice = (id: number, p: ModelPriceInput) =>
+  request<ModelPrice>(`/prices/${id}`, put(p))
+export const deletePrice = (id: number) =>
+  request<{ ok: boolean }>(`/prices/${id}`, { method: 'DELETE' })
+export const restorePrices = () => request<ModelPrice[]>('/prices/restore', { method: 'POST' })
 
 export const listProfiles = () => request<Profile[]>('/profiles')
 export const createProfile = (p: ProfileInput) => request<Profile>('/profiles', body(p))

@@ -71,6 +71,18 @@ function trimFloat(n: number): string {
   return n.toFixed(digits).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')
 }
 
+/** Equivalent API dollars. Tiny amounts keep extra digits so luna-scale costs stay visible. */
+export function formatUSD(n: number | null | undefined): string {
+  if (!isNum(n)) return DASH
+  const sign = n < 0 ? '-' : ''
+  const abs = Math.abs(n)
+  if (abs === 0) return '$0'
+  if (abs >= 100) return `${sign}$${abs.toFixed(0)}`
+  if (abs >= 1) return `${sign}$${abs.toFixed(2)}`
+  if (abs >= 0.01) return `${sign}$${abs.toFixed(4)}`
+  return `${sign}$${abs.toFixed(6)}`
+}
+
 /** Unix seconds → "3小时后". */
 export function formatUnixRelative(sec: number | null | undefined): string {
   if (!isNum(sec) || sec <= 0) return DASH

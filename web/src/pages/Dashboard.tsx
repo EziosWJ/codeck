@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getAccount, getDashboard, getHealth } from '../api'
+import { getAccount, getDashboard, getHealth, getUsage } from '../api'
 import type { Conversation, TaskRun } from '../api'
 import { useLoad } from '../useLoad'
 import { QuotaPanel } from '../components/Quota'
@@ -8,7 +8,9 @@ import { Empty, ErrorBox, Spinner, StatusBadge } from '../components/ui'
 import {
   formatDuration,
   formatRelative,
+  formatCompact,
   formatTs,
+  formatUSD,
   labelOf,
   text,
   tokenSummary,
@@ -21,6 +23,7 @@ export default function Dashboard() {
   const health = useLoad(getHealth)
   const overview = useLoad(getDashboard)
   const account = useLoad(getAccount)
+  const usage = useLoad(getUsage)
   const [lastLoaded, setLastLoaded] = useState<string | null>(null)
 
   const reload = overview.reload
@@ -57,8 +60,9 @@ export default function Dashboard() {
             reloadHealth()
             reload()
             reloadAccount()
+            usage.reload()
           }}
-          disabled={overview.loading || health.loading || account.loading}
+          disabled={overview.loading || health.loading || account.loading || usage.loading}
         >
           立即刷新
         </button>
@@ -73,6 +77,43 @@ export default function Dashboard() {
         </div>
         <div className="card-body">
           <QuotaPanel data={account.data} loading={account.loading} error={account.error} />
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-head">
+          <div className="card-title">本地等价成本</div>
+          <Link className="small" to="/usage">
+            查看用量
+          </Link>
+        </div>
+        <div className="card-body">
+          {usage.loading && !usage.data ? (
+            <Spinner label="正在汇总本机 session…" />
+          ) : usage.error && !usage.data ? (
+            <ErrorBox error={usage.error} />
+          ) : usage.data ? (
+            <div className="health">
+              <div className="health-item">
+                <div className="health-label">等价 USD</div>
+                <div className="health-value">{formatUSD(usage.data.summary.usd)}</div>
+              </div>
+              <div className="health-item">
+                <div className="health-label">合计 tokens</div>
+                <div className="health-value">{formatCompact(usage.data.summary.total_tokens)}</div>
+              </div>
+              <div className="health-item">
+                <div className="health-label">未定价</div>
+                <div className="health-value">{formatCompact(usage.data.summary.unpriced_tokens)}</div>
+              </div>
+              <div className="health-item">
+                <div className="health-label">turn</div>
+                <div className="health-value">{usage.data.turns}</div>
+              </div>
+            </div>
+          ) : (
+            <Empty>无法读取本地用量。</Empty>
+          )}
         </div>
       </div>
 

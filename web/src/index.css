@@ -421,6 +421,10 @@ a:hover {
   font-variant-numeric: tabular-nums;
 }
 
+.usage-foot {
+  margin: 4px 0 18px;
+}
+
 .health {
   display: flex;
   flex-wrap: wrap;
