@@ -8,7 +8,8 @@
 
 `task` / `task --list`。常用：`setup`、`run`、`dev`、`test`、`lint`、`check`。
 
-- 发布目标：`CGO_ENABLED=0` 静态二进制，UI 经 `//go:embed all:web/dist` 打进 `main.go`。先 `task build:web` 再 `go build`。
+- 发布目标：`CGO_ENABLED=0` 静态二进制，UI 经 `//go:embed all:web/dist` 打进 `main.go`。先 `task build:web` 再 `go build`。本地打 linux 包：`task package`（`dist/` 下 amd64 / aarch64）。
+- 发版：打 `vX.Y.Z` tag 并 push 到 GitHub，Actions 会构建 linux/amd64、linux/aarch64 静态包并上传到 Release 页。
 - 集成测试花 token：`CODECK_INTEGRATION=1 go test -count=1 -v -run TestIntegrationRealCodex ./internal/codex/`
 - 探测 App Server 账号接口：`task appserver-probe`（打印 `account/read`、`account/rateLimits/read`、`account/usage/read` 的原始 JSON）
 
