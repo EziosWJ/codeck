@@ -14,10 +14,10 @@ import (
 	"sync"
 	"time"
 
-	"croncodex/internal/codex"
-	"croncodex/internal/config"
-	"croncodex/internal/scheduler"
-	"croncodex/internal/store"
+	"codeck/internal/codex"
+	"codeck/internal/config"
+	"codeck/internal/scheduler"
+	"codeck/internal/store"
 )
 
 // maxBodyBytes bounds request bodies; every payload this API accepts is small.

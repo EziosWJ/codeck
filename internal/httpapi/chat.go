@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync"
 
-	"croncodex/internal/codex"
-	"croncodex/internal/store"
+	"codeck/internal/codex"
+	"codeck/internal/store"
 )
 
 func (s *Server) handleListConversations(w http.ResponseWriter, r *http.Request) {

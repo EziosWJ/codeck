@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"croncodex/internal/codex"
-	"croncodex/internal/store"
+	"codeck/internal/codex"
+	"codeck/internal/store"
 )
 
 func (s *Server) handleListProfiles(w http.ResponseWriter, r *http.Request) {

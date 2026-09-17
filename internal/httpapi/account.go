@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"croncodex/internal/codex"
+	"codeck/internal/codex"
 )
 
 const accountCacheTTL = 15 * time.Second

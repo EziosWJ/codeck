@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"croncodex/internal/scheduler"
-	"croncodex/internal/store"
+	"codeck/internal/scheduler"
+	"codeck/internal/store"
 )
 
 func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
