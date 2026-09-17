@@ -1,4 +1,4 @@
-// Command croncodex is a small web tool for chatting with the Codex CLI through
+// Command codeck is a small web tool for chatting with the Codex CLI through
 // isolated profiles and for running Codex prompts on a schedule.
 //
 // It serves both the REST API and the built web UI from a single binary, and
@@ -20,11 +20,11 @@ import (
 	"syscall"
 	"time"
 
-	"croncodex/internal/codex"
-	"croncodex/internal/config"
-	"croncodex/internal/httpapi"
-	"croncodex/internal/scheduler"
-	"croncodex/internal/store"
+	"codeck/internal/codex"
+	"codeck/internal/config"
+	"codeck/internal/httpapi"
+	"codeck/internal/scheduler"
+	"codeck/internal/store"
 )
 
 // version is overridden at build time with -ldflags "-X main.version=...".
@@ -53,7 +53,7 @@ func run() error {
 	flag.Parse()
 
 	if *showVersion {
-		fmt.Println("croncodex", version)
+		fmt.Println("codeck", version)
 		return nil
 	}
 
@@ -73,7 +73,7 @@ func run() error {
 		return err
 	}
 
-	log.Info("starting croncodex",
+	log.Info("starting codeck",
 		"version", version, "addr", cfg.Addr, "data_dir", cfg.DataDir, "db", cfg.DBPath)
 
 	db, err := store.Open(cfg.DBPath)
