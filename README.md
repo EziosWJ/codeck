@@ -4,6 +4,46 @@
 
 默认 `:8080`，数据 `./data/`。
 
+## 功能
+
+六个页面，侧栏切换。下面每张图都是跑着的本机实例。
+
+### 总览
+
+账号额度（5 小时 / 7 天窗口、credits）、本机 session 换成 Standard API 的等价成本、后端健康，以及档案 / 对话 / 任务计数。每 10 秒刷新。打开总览不重扫用量。
+
+![总览：账号额度、本地成本和运行状态](docs/screenshots/dashboard.png)
+
+### 对话
+
+对话绑一个 Profile。输入走 `POST /api/chat/stream`（SSE）；有 `thread_id` 时用 `codex exec resume` 续聊。侧栏选档案新建，主栏看记录和 token。
+
+![对话：按档案隔离的 Codex 聊天](docs/screenshots/chat.png)
+
+### 档案
+
+一份 Codex 配置。`name` 即 `data/codex-home/<name>/` 目录名。可测连通、看生成的 `config.toml`。精简模式关掉一批重型 feature，不能配 `danger-full-access`。
+
+![档案：模型、沙箱与批准策略](docs/screenshots/profiles.png)
+
+### 任务
+
+prompt + Profile + cron。调度到期先推进 `next_run_at` 再启动，同一 Task 禁止重叠。可立即手动跑，不改下次时间。展开「记录」看每次 TaskRun。
+
+![任务：cron 定时跑 prompt，可立即执行](docs/screenshots/tasks.png)
+
+### 用量
+
+扫描各 Profile 与 `~/.codex` 的 session jsonl，按模型汇总 token，用 `model_prices` 换成 Standard API 美元。不是 ChatGPT credits。可改单价或恢复种子价；未匹配模型只计 token。
+
+![用量：按模型汇总 token 与等价成本](docs/screenshots/usage.png)
+
+### 历史
+
+运行器记下的全部内容：对话回合与定时执行，含状态、token、耗时和输出摘要。
+
+![历史：对话消息与任务运行流水](docs/screenshots/history.png)
+
 ## 命令
 
 `task` / `task --list`。常用：`setup`、`run`、`dev`、`test`、`lint`、`check`。
