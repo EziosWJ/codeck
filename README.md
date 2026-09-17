@@ -36,6 +36,7 @@ data/                   db、每 Profile 的 CODEX_HOME 与 workspace
 | Conversation | 绑一个 Profile。`thread_id` 用于 `codex exec resume`。聊天 `POST /api/chat/stream`（SSE）。 |
 | Task | prompt + Profile + cron（五字段或 `@daily` / `@every 1h`）+ 超时。`next_run_at` 写库。 |
 | TaskRun | 一次执行：`schedule` / `manual`，输出、错误、token、耗时。 |
+| 本地用量 | 扫描各 Profile 与 `~/.codex` 的 session jsonl，按模型汇总 token，用 `model_prices` 表换成 Standard API 美元。 |
 
 磁盘：`data/codeck.db`、`data/codex-home/<profile>/`、`data/workspace/<profile>/`。Profile 可覆盖 `work_dir`。scratch workspace 默认空，避免吃到仓库 `AGENTS.md`。
 
@@ -77,11 +78,12 @@ data/                   db、每 Profile 的 CODEX_HOME 与 workspace
 全在 `/api`。JSON；未知字段拒绝。聊天为 POST SSE。前端路由刷新回退 `index.html`。
 
 ```
-GET  /health  /dashboard  /account  /history  /runs
+GET  /health  /dashboard  /account  /history  /runs  /usage
 CRUD /profiles  GET /profiles/{id}/config  POST /profiles/{id}/test  POST /profiles/{id}/prompt-preview
 CRUD /conversations  PATCH /conversations/{id}
 POST /chat/stream
 CRUD /tasks  POST /tasks/{id}/run  GET /tasks/{id}/runs
+CRUD /prices  POST /prices/restore
 ```
 
 `web/src/api.ts` 是前端唯一入口。开发：Vite `:5173` 代理 `/api` → `:8080`。
