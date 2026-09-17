@@ -53,6 +53,10 @@ prompt + Profile + cron。调度到期先推进 `next_run_at` 再启动，同一
 - 集成测试花 token：`CODECK_INTEGRATION=1 go test -count=1 -v -run TestIntegrationRealCodex ./internal/codex/`
 - 探测 App Server 账号接口：`task appserver-probe`（打印 `account/read`、`account/rateLimits/read`、`account/usage/read` 的原始 JSON）
 
+## 部署
+
+本机长期跑（调度、开机自启、与仓库数据隔离）用 user systemd，步骤见 [docs/deploy.md](docs/deploy.md)。开发仍用上面的 `task run` / `task dev`。
+
 ## 布局
 
 ```
