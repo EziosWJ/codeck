@@ -12,7 +12,6 @@ version: '3'
 
 vars:
   BINARY: codeck
-  # Not a git repository yet, so fall back to "dev" until tags exist.
   VERSION:
     sh: git describe --tags --always --dirty 2>/dev/null || echo dev
   # Point the server at a config file: `task run CONFIG=./codeck.env`
@@ -79,6 +78,28 @@ tasks:
       - go build -trimpath -ldflags "{{.RELEASE_LDFLAGS}}" -o {{.BINARY}} .
       - printf 'built %s %s (%s)\n' {{.BINARY}} {{.VERSION}} "$(du -h {{.BINARY}} | cut -f1)"
 
+  package:
+    desc: Linux amd64 and aarch64 tarballs plus checksums under dist/
+    deps: [build:web]
+    cmds:
+      - rm -rf dist
+      - mkdir -p dist
+      - task: package:one
+        vars: {GOARCH: amd64, ARCH: amd64}
+      - task: package:one
+        vars: {GOARCH: arm64, ARCH: aarch64}
+      - cd dist && sha256sum {{.BINARY}}-linux-* *.tar.gz > SHA256SUMS
+      - cat dist/SHA256SUMS
+
+  package:one:
+    internal: true
+    cmds:
+      - mkdir -p dist/{{.ARCH}}
+      - GOOS=linux GOARCH={{.GOARCH}} go build -trimpath -ldflags "{{.RELEASE_LDFLAGS}}" -o dist/{{.ARCH}}/{{.BINARY}} .
+      - tar -C dist/{{.ARCH}} -czf dist/{{.BINARY}}-{{.VERSION}}-linux-{{.ARCH}}.tar.gz {{.BINARY}}
+      - mv dist/{{.ARCH}}/{{.BINARY}} dist/{{.BINARY}}-linux-{{.ARCH}}
+      - rmdir dist/{{.ARCH}}
+
   run:
     desc: Build everything and start the server in the foreground
     deps: [build]
@@ -143,10 +164,10 @@ tasks:
 
   check:
     desc: Everything CI would run
-    deps: [lint, test]
+    deps: [build:web, lint, test]
 
   clean:
     desc: Remove build output (node_modules is left alone)
     cmds:
       - rm -f {{.BINARY}}
-      - rm -rf web/dist .task
+      - rm -rf dist web/dist .task
