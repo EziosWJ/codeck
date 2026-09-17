@@ -75,6 +75,25 @@ func TestUsageEndpointPricesLocalSessions(t *testing.T) {
 	if !foundSol {
 		t.Fatalf("by_model missing gpt-6-sol: %+v", got.ByModel)
 	}
+
+	firstScan := got.ScannedAt
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/usage", nil))
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.ScannedAt != firstScan {
+		t.Fatalf("second GET rescanned: %s -> %s", firstScan, got.ScannedAt)
+	}
+
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/usage?refresh=1", nil))
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.ScannedAt == firstScan {
+		t.Fatal("refresh=1 kept the cached snapshot")
+	}
 }
 
 func TestPriceCRUDAndRestore(t *testing.T) {

@@ -8,8 +8,6 @@ import (
 	"codeck/internal/usage"
 )
 
-const usageCacheTTL = 30 * time.Second
-
 func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
 	refresh := r.URL.Query().Get("refresh") == "1"
 	writeJSON(w, http.StatusOK, s.loadUsage(refresh))
@@ -22,7 +20,9 @@ func (s *Server) loadUsage(refresh bool) usage.Report {
 
 	s.usageMu.Lock()
 	defer s.usageMu.Unlock()
-	if !refresh && !s.usageCachedAt.IsZero() && time.Since(s.usageCachedAt) < usageCacheTTL {
+	// Session files only change when Codex runs. Keep the snapshot until the
+	// operator asks for a rescan or the price table changes.
+	if !refresh && !s.usageCachedAt.IsZero() {
 		return s.usageCached
 	}
 
