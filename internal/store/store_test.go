@@ -290,3 +290,47 @@ func TestTaskLifecycleAndDueSelection(t *testing.T) {
 		t.Fatalf("runs survived task delete: %d", len(runs))
 	}
 }
+
+func TestModelPriceCRUD(t *testing.T) {
+	db := newTestDB(t)
+	n, err := db.CountModelPrices()
+	if err != nil || n != 0 {
+		t.Fatalf("empty table count = %d, %v", n, err)
+	}
+
+	created, err := db.CreateModelPrice(ModelPrice{
+		Pattern: "gpt-6-sol", InputUSDPerMTok: 4, CachedInputUSDPerMTok: 0.4,
+		CacheWriteUSDPerMTok: 5, OutputUSDPerMTok: 20,
+	})
+	if err != nil {
+		t.Fatalf("CreateModelPrice: %v", err)
+	}
+	if created.ID == 0 || created.Priority != DefaultPricePriority || created.LongThresholdTokens != DefaultLongThreshold {
+		t.Fatalf("defaults not applied: %+v", created)
+	}
+
+	if _, err := db.CreateModelPrice(ModelPrice{Pattern: "gpt-6-sol", OutputUSDPerMTok: 1}); err == nil {
+		t.Fatal("expected duplicate pattern to fail")
+	}
+	if _, err := db.CreateModelPrice(ModelPrice{Pattern: "bad/name", OutputUSDPerMTok: 1}); err == nil {
+		t.Fatal("expected path separator to fail")
+	}
+
+	long := 8.0
+	created.LongInputUSDPerMTok = &long
+	created.Notes = "exact"
+	updated, err := db.UpdateModelPrice(created)
+	if err != nil {
+		t.Fatalf("UpdateModelPrice: %v", err)
+	}
+	if updated.Notes != "exact" || updated.LongInputUSDPerMTok == nil || *updated.LongInputUSDPerMTok != 8 {
+		t.Fatalf("update = %+v", updated)
+	}
+
+	if err := db.DeleteModelPrice(created.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.GetModelPrice(created.ID); err != ErrNotFound {
+		t.Fatalf("Get after delete = %v", err)
+	}
+}

@@ -137,6 +137,25 @@ CREATE INDEX idx_task_runs_started ON task_runs(started_at DESC);
 	`ALTER TABLE profiles ADD COLUMN include_apps_instructions INTEGER NOT NULL DEFAULT 0;`,
 	`ALTER TABLE profiles ADD COLUMN include_collaboration_mode_instructions INTEGER NOT NULL DEFAULT 0;`,
 	`ALTER TABLE profiles ADD COLUMN include_environment_context INTEGER NOT NULL DEFAULT 0;`,
+	`
+CREATE TABLE model_prices (
+    id                            INTEGER PRIMARY KEY AUTOINCREMENT,
+    pattern                       TEXT    NOT NULL UNIQUE,
+    input_usd_per_mtok            REAL    NOT NULL,
+    cached_input_usd_per_mtok     REAL    NOT NULL,
+    cache_write_usd_per_mtok      REAL    NOT NULL,
+    output_usd_per_mtok           REAL    NOT NULL,
+    long_input_usd_per_mtok       REAL,
+    long_cached_input_usd_per_mtok REAL,
+    long_cache_write_usd_per_mtok REAL,
+    long_output_usd_per_mtok      REAL,
+    long_threshold_tokens         INTEGER NOT NULL DEFAULT 272000,
+    priority                      INTEGER NOT NULL DEFAULT 100,
+    notes                         TEXT    NOT NULL DEFAULT '',
+    created_at                    TEXT    NOT NULL,
+    updated_at                    TEXT    NOT NULL
+);
+`,
 }
 
 func (d *DB) migrate() error {
