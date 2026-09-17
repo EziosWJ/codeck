@@ -18,8 +18,8 @@ export default function App() {
     <div className="app">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-name">Codex 控制台</div>
-          <div className="brand-sub">定时任务与档案</div>
+          <div className="brand-name">Codeck</div>
+          <div className="brand-sub">本机 Codex 控制台</div>
         </div>
         <nav className="nav">
           {NAV.map((item) => (
