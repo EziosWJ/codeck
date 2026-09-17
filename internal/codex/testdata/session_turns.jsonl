@@ -1,0 +1,5 @@
+{"timestamp":"2026-09-16T22:00:00.000Z","type":"turn_context","payload":{"turn_id":"t1","model":"gpt-5.6-luna","effort":"low"}}
+{"timestamp":"2026-09-16T22:00:01.000Z","type":"token_usage_record","payload":{"turn_id":"t1","usage":{"input_tokens":1000,"cached_input_tokens":400,"cache_write_input_tokens":0,"output_tokens":50,"reasoning_output_tokens":20,"total_tokens":1050}}}
+{"timestamp":"2026-09-16T22:01:00.000Z","type":"turn_context","payload":{"turn_id":"t2","model":"gpt-6-sol"}}
+{"timestamp":"2026-09-16T22:01:01.000Z","type":"token_usage_record","payload":{"turn_id":"t2","usage":{"input_tokens":2000,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":10,"reasoning_output_tokens":0,"total_tokens":2010}}}
+{"timestamp":"2026-09-16T22:02:00.000Z","type":"token_usage_record","payload":{"turn_id":"t-orphan","usage":{"input_tokens":100,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":5,"reasoning_output_tokens":0,"total_tokens":105}}}
