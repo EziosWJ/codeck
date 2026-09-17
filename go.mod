@@ -1,4 +1,4 @@
-module croncodex
+module codeck
 
 go 1.26.5
 

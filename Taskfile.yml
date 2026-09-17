@@ -1,6 +1,6 @@
 version: '3'
 
-# Project automation for cronCodex.
+# Project automation for Codeck.
 #
 #   task            list every task
 #   task setup      install frontend + Go dependencies (once)
@@ -11,11 +11,11 @@ version: '3'
 # before the Go build runs. The `build` task orders that for you.
 
 vars:
-  BINARY: croncodex
+  BINARY: codeck
   # Not a git repository yet, so fall back to "dev" until tags exist.
   VERSION:
     sh: git describe --tags --always --dirty 2>/dev/null || echo dev
-  # Point the server at a config file: `task run CONFIG=./croncodex.env`
+  # Point the server at a config file: `task run CONFIG=./codeck.env`
   CONFIG: ''
   DEV_LDFLAGS: '-X main.version={{.VERSION}}'
   RELEASE_LDFLAGS: '-s -w -X main.version={{.VERSION}}'
@@ -83,7 +83,7 @@ tasks:
     desc: Build everything and start the server in the foreground
     deps: [build]
     env:
-      CRONCODEX_CONFIG: '{{.CONFIG}}'
+      CODECK_CONFIG: '{{.CONFIG}}'
     cmds:
       - ./{{.BINARY}}
 
@@ -111,7 +111,7 @@ tasks:
   test:integration:
     desc: Opt-in suite that drives the real Codex CLI (spends tokens)
     cmds:
-      - CRONCODEX_INTEGRATION=1 go test -count=1 -v -run TestIntegrationRealCodex ./internal/codex/
+      - CODECK_INTEGRATION=1 go test -count=1 -v -run TestIntegrationRealCodex ./internal/codex/
 
   appserver-probe:
     desc: Start Codex App Server and print account/read, rateLimits, usage JSON

@@ -1,5 +1,5 @@
 # Build output
-/croncodex
+/codeck
 *.exe
 *.exe~
 *.dll
