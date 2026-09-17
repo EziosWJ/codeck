@@ -60,9 +60,8 @@ export default function Dashboard() {
             reloadHealth()
             reload()
             reloadAccount()
-            usage.reload()
           }}
-          disabled={overview.loading || health.loading || account.loading || usage.loading}
+          disabled={overview.loading || health.loading || account.loading}
         >
           立即刷新
         </button>
@@ -93,24 +92,29 @@ export default function Dashboard() {
           ) : usage.error && !usage.data ? (
             <ErrorBox error={usage.error} />
           ) : usage.data ? (
-            <div className="health">
-              <div className="health-item">
-                <div className="health-label">等价 USD</div>
-                <div className="health-value">{formatUSD(usage.data.summary.usd)}</div>
+            <>
+              <div className="health">
+                <div className="health-item">
+                  <div className="health-label">等价 USD</div>
+                  <div className="health-value">{formatUSD(usage.data.summary.usd)}</div>
+                </div>
+                <div className="health-item">
+                  <div className="health-label">合计 tokens</div>
+                  <div className="health-value">{formatCompact(usage.data.summary.total_tokens)}</div>
+                </div>
+                <div className="health-item">
+                  <div className="health-label">未定价</div>
+                  <div className="health-value">{formatCompact(usage.data.summary.unpriced_tokens)}</div>
+                </div>
+                <div className="health-item">
+                  <div className="health-label">turn</div>
+                  <div className="health-value">{usage.data.turns}</div>
+                </div>
               </div>
-              <div className="health-item">
-                <div className="health-label">合计 tokens</div>
-                <div className="health-value">{formatCompact(usage.data.summary.total_tokens)}</div>
+              <div className="faint small" style={{ marginTop: 10 }}>
+                扫描于 {formatTs(usage.data.scanned_at)}，打开总览不重扫。要更新请到用量页点重新扫描。
               </div>
-              <div className="health-item">
-                <div className="health-label">未定价</div>
-                <div className="health-value">{formatCompact(usage.data.summary.unpriced_tokens)}</div>
-              </div>
-              <div className="health-item">
-                <div className="health-label">turn</div>
-                <div className="health-value">{usage.data.turns}</div>
-              </div>
-            </div>
+            </>
           ) : (
             <Empty>无法读取本地用量。</Empty>
           )}
