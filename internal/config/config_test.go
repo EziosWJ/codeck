@@ -17,7 +17,7 @@ func TestLoadDerivesPathsFromDataDir(t *testing.T) {
 	}
 
 	// Setting only DATA_DIR must move every storage location together.
-	if cfg.DBPath != filepath.Join(dir, "croncodex.db") {
+	if cfg.DBPath != filepath.Join(dir, "codeck.db") {
 		t.Errorf("DBPath = %q, want it under DataDir", cfg.DBPath)
 	}
 	if cfg.CodexHomeRoot != filepath.Join(dir, "codex-home") {
@@ -70,7 +70,7 @@ func TestDefaultsWhenNothingIsSet(t *testing.T) {
 		t.Errorf("MaxConcurrentRuns = %d, want 4", cfg.MaxConcurrentRuns)
 	}
 	// Relative defaults are resolved against the working directory.
-	wantDB, _ := filepath.Abs(filepath.Join("data", "croncodex.db"))
+	wantDB, _ := filepath.Abs(filepath.Join("data", "codeck.db"))
 	if cfg.DBPath != wantDB {
 		t.Errorf("DBPath = %q, want %q", cfg.DBPath, wantDB)
 	}
@@ -78,7 +78,7 @@ func TestDefaultsWhenNothingIsSet(t *testing.T) {
 
 func TestConfigFileThenEnvironmentOverrides(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "croncodex.env")
+	path := filepath.Join(dir, "codeck.env")
 	content := `# comment line
 ADDR = ":9999"
 SCHEDULER_INTERVAL=45s
@@ -136,7 +136,7 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 }
 
 func TestUnknownEnvironmentVariablesAreIgnored(t *testing.T) {
-	// A stray CRONCODEX_ variable in the environment must not stop the service.
+	// A stray CODECK_ variable in the environment must not stop the service.
 	t.Setenv(EnvPrefix+"SOMETHING_UNKNOWN", "value")
 	if _, err := Load(""); err != nil {
 		t.Errorf("Load: %v", err)

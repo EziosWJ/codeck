@@ -14,7 +14,7 @@ import (
 
 const (
 	// EnvPrefix prefixes every environment variable this application reads.
-	EnvPrefix = "CRONCODEX_"
+	EnvPrefix = "CODECK_"
 )
 
 // Config holds all runtime settings.
@@ -70,7 +70,7 @@ func Default() Config {
 
 // Load builds a Config from defaults, then the optional config file, then the
 // environment. Later sources win. configPath may be empty, in which case only
-// CRONCODEX_CONFIG is consulted.
+// CODECK_CONFIG is consulted.
 func Load(configPath string) (Config, error) {
 	cfg := Default()
 
@@ -103,7 +103,7 @@ func (c *Config) derivePaths() {
 		c.DataDir = "./data"
 	}
 	if c.DBPath == "" {
-		c.DBPath = filepath.Join(c.DataDir, "croncodex.db")
+		c.DBPath = filepath.Join(c.DataDir, "codeck.db")
 	}
 	if c.CodexHomeRoot == "" {
 		c.CodexHomeRoot = filepath.Join(c.DataDir, "codex-home")
@@ -138,7 +138,7 @@ func (c Config) EnsureDirs() error {
 }
 
 // applyFile reads KEY=VALUE lines. Blank lines and lines starting with # are
-// ignored. Keys may be written with or without the CRONCODEX_ prefix.
+// ignored. Keys may be written with or without the CODECK_ prefix.
 func applyFile(cfg *Config, path string) error {
 	f, err := os.Open(path)
 	if err != nil {
