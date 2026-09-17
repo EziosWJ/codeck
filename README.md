@@ -127,3 +127,7 @@ CRUD /prices  POST /prices/restore
 ```
 
 `web/src/api.ts` 是前端唯一入口。开发：Vite `:5173` 代理 `/api` → `:8080`。
+
+## 致谢
+
+感谢 [LINUX DO](https://linux.do/) 社区提供的交流、分享与支持。
