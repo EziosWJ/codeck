@@ -57,6 +57,20 @@ data/                   db、每 Profile 的 CODEX_HOME 与 workspace
 
 未显式设置时，`DB_PATH` / `CODEX_HOME_ROOT` / `WORKSPACE_ROOT` 都挂在 `DATA_DIR` 下。
 
+| 键 | 默认值 | 说明 |
+|---|---|---|
+| `ADDR` | `:8080` | HTTP 监听地址，如 `:9090`、`127.0.0.1:8080` |
+| `DATA_DIR` | `./data` | 数据根目录 |
+| `DB_PATH` | `$DATA_DIR/codeck.db` | SQLite 数据库路径 |
+| `CODEX_BIN` | `codex` | Codex CLI 可执行文件名或路径 |
+| `CODEX_HOME_ROOT` | `$DATA_DIR/codex-home` | 各 Profile 的 CODEX_HOME 父目录 |
+| `WORKSPACE_ROOT` | `$DATA_DIR/workspace` | 各 Profile 的 scratch workspace 父目录 |
+| `AUTH_SOURCE` | `~/.codex/auth.json` | symlink 进各 Profile home 的 auth.json |
+| `SCHEDULER_INTERVAL` | `10s` | 调度轮询间隔 |
+| `DEFAULT_TIMEOUT` | `5m` | 单次 Codex 调用默认超时 |
+| `MAX_CONCURRENT_RUNS` | `4` | 最大并发 Codex 进程数 |
+| `LOG_LEVEL` | `info` | 日志级别：`debug` / `info` / `warn` / `error` |
+
 ## API
 
 全在 `/api`。JSON；未知字段拒绝。聊天为 POST SSE。前端路由刷新回退 `index.html`。
