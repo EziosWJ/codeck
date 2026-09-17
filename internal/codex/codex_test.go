@@ -393,10 +393,10 @@ func TestScanEventsHandlesEmptyAndGarbageOnlyInput(t *testing.T) {
 // resume through the generated profile home. It is opt-in because it calls a
 // paid API:
 //
-//	CRONCODEX_INTEGRATION=1 go test ./internal/codex/ -run Integration -v
+//	CODECK_INTEGRATION=1 go test ./internal/codex/ -run Integration -v
 func TestIntegrationRealCodex(t *testing.T) {
-	if os.Getenv("CRONCODEX_INTEGRATION") != "1" {
-		t.Skip("set CRONCODEX_INTEGRATION=1 to run against the real Codex CLI")
+	if os.Getenv("CODECK_INTEGRATION") != "1" {
+		t.Skip("set CODECK_INTEGRATION=1 to run against the real Codex CLI")
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {

@@ -1,6 +1,6 @@
 package codex
 
-import "croncodex/internal/store"
+import "codeck/internal/store"
 
 // SpecFromProfile maps a stored profile onto the Codex invocation settings.
 // Keeping the mapping here means the codex package owns every decision about

@@ -14,7 +14,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	if os.Getenv("CRONCODEX_FAKE_APPSERVER") == "1" {
+	if os.Getenv("CODECK_FAKE_APPSERVER") == "1" {
 		runFakeAppServer()
 		os.Exit(0)
 	}
@@ -79,10 +79,10 @@ func TestAppServerHandshakeAndAccountReads(t *testing.T) {
 
 	srv, err := StartAppServer(ctx, AppServerOptions{
 		Bin:           os.Args[0],
-		ClientName:    "croncodex-test",
+		ClientName:    "codeck-test",
 		ClientVersion: "test",
 		Log:           slog.New(slog.NewTextHandler(io.Discard, nil)),
-		ExtraEnv:      []string{"CRONCODEX_FAKE_APPSERVER=1"},
+		ExtraEnv:      []string{"CODECK_FAKE_APPSERVER=1"},
 	})
 	if err != nil {
 		t.Fatalf("StartAppServer: %v", err)
@@ -130,7 +130,7 @@ func TestAppServerClosesChild(t *testing.T) {
 	srv, err := StartAppServer(ctx, AppServerOptions{
 		Bin:      os.Args[0],
 		Log:      slog.New(slog.NewTextHandler(io.Discard, nil)),
-		ExtraEnv: []string{"CRONCODEX_FAKE_APPSERVER=1"},
+		ExtraEnv: []string{"CODECK_FAKE_APPSERVER=1"},
 	})
 	if err != nil {
 		t.Fatalf("StartAppServer: %v", err)
@@ -149,10 +149,10 @@ func TestAppServerClosesChild(t *testing.T) {
 // TestIntegrationAppServerAccountAPIs drives the real Codex App Server. Opt-in
 // because it talks to the operator's logged-in account:
 //
-//	CRONCODEX_INTEGRATION=1 go test -count=1 -v -run TestIntegrationAppServer ./internal/codex/
+//	CODECK_INTEGRATION=1 go test -count=1 -v -run TestIntegrationAppServer ./internal/codex/
 func TestIntegrationAppServerAccountAPIs(t *testing.T) {
-	if os.Getenv("CRONCODEX_INTEGRATION") != "1" {
-		t.Skip("set CRONCODEX_INTEGRATION=1 to run against the real Codex App Server")
+	if os.Getenv("CODECK_INTEGRATION") != "1" {
+		t.Skip("set CODECK_INTEGRATION=1 to run against the real Codex App Server")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)

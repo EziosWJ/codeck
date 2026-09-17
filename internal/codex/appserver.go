@@ -67,7 +67,7 @@ func StartAppServer(ctx context.Context, opt AppServerOptions) (*AppServer, erro
 		opt.Bin = "codex"
 	}
 	if opt.ClientName == "" {
-		opt.ClientName = "croncodex"
+		opt.ClientName = "codeck"
 	}
 	if opt.ClientVersion == "" {
 		opt.ClientVersion = "dev"
@@ -135,7 +135,7 @@ func (s *AppServer) handshake(ctx context.Context, name, ver string) error {
 	raw, err := s.rpc.Call(ctx, methodInitialize, map[string]any{
 		"clientInfo": map[string]any{
 			"name":    name,
-			"title":   "cronCodex",
+			"title":   "Codeck",
 			"version": ver,
 		},
 	})
