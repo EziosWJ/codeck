@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CGO_ENABLED: "0"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Lint and test
+        run: task check
+
+      - name: Build linux amd64 and aarch64 packages
+        run: task package VERSION="${GITHUB_REF_NAME}"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          assets=(
+            dist/codeck-linux-amd64
+            dist/codeck-linux-aarch64
+            "dist/codeck-${tag}-linux-amd64.tar.gz"
+            "dist/codeck-${tag}-linux-aarch64.tar.gz"
+            dist/SHA256SUMS
+          )
+          extra=()
+          if [[ "${tag}" == *-* ]]; then
+            extra+=(--prerelease)
+          fi
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            gh release upload "${tag}" "${assets[@]}" --clobber
+          else
+            gh release create "${tag}" "${assets[@]}" \
+              --title "Codeck ${tag}" \
+              --generate-notes \
+              "${extra[@]}"
+          fi
