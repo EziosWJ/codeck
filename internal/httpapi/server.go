@@ -18,6 +18,7 @@ import (
 	"codeck/internal/config"
 	"codeck/internal/scheduler"
 	"codeck/internal/store"
+	"codeck/internal/usage"
 )
 
 // maxBodyBytes bounds request bodies; every payload this API accepts is small.
@@ -38,6 +39,10 @@ type Server struct {
 	accountMu       sync.Mutex
 	accountCached   accountSnapshot
 	accountCachedAt time.Time
+
+	usageMu       sync.Mutex
+	usageCached   usage.Report
+	usageCachedAt time.Time
 }
 
 // NewServer wires the HTTP layer. static may be nil, in which case the API is
@@ -84,6 +89,13 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/runs", s.handleListRuns)
 	mux.HandleFunc("GET /api/history", s.handleHistory)
+
+	mux.HandleFunc("GET /api/usage", s.handleUsage)
+	mux.HandleFunc("GET /api/prices", s.handleListPrices)
+	mux.HandleFunc("POST /api/prices", s.handleCreatePrice)
+	mux.HandleFunc("PUT /api/prices/{id}", s.handleUpdatePrice)
+	mux.HandleFunc("DELETE /api/prices/{id}", s.handleDeletePrice)
+	mux.HandleFunc("POST /api/prices/restore", s.handleRestorePrices)
 
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "no such endpoint: %s %s", r.Method, r.URL.Path)

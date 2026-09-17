@@ -296,6 +296,7 @@ func isValidationError(err error) bool {
 		"already exists", "name is required", "prompt is required",
 		"cron_expr is required", "invalid cron expression",
 		"cron expression is required",
+		"pattern is required", "pattern must", "must be >= 0",
 	} {
 		if strings.Contains(msg, marker) {
 			return true
