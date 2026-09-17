@@ -14,8 +14,8 @@ import (
 
 	"github.com/robfig/cron/v3"
 
-	"croncodex/internal/codex"
-	"croncodex/internal/store"
+	"codeck/internal/codex"
+	"codeck/internal/store"
 )
 
 // parser accepts the standard five-field cron syntax plus @descriptors such as

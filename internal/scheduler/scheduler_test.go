@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"croncodex/internal/codex"
-	"croncodex/internal/store"
+	"codeck/internal/codex"
+	"codeck/internal/store"
 )
 
 // fakeRunner records every invocation and returns a canned result, so the
