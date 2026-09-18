@@ -5,6 +5,7 @@ package config
 import (
 	"bufio"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -21,6 +22,11 @@ const (
 type Config struct {
 	// Addr is the HTTP listen address, e.g. ":8080".
 	Addr string
+	// HTTPAuthUser and HTTPAuthPassword enable HTTP Basic authentication when
+	// both are set. They are never exposed through the API.
+	HTTPAuthUser     string
+	HTTPAuthPassword string
+
 	// DataDir holds the database, generated codex homes and workspaces.
 	DataDir string
 	// DBPath is the SQLite database file.
@@ -59,7 +65,9 @@ type Config struct {
 func Default() Config {
 	home, _ := os.UserHomeDir()
 	return Config{
-		Addr:              ":8080",
+		Addr:              "127.0.0.1:8080",
+		HTTPAuthUser:      "",
+		HTTPAuthPassword:  "",
 		DataDir:           "./data",
 		DBPath:            "",
 		CodexBin:          "codex",
@@ -99,6 +107,9 @@ func Load(configPath string) (Config, error) {
 	cfg.DataDir = absOrSelf(cfg.DataDir)
 	cfg.CodexHomeRoot = absOrSelf(cfg.CodexHomeRoot)
 	cfg.WorkspaceRoot = absOrSelf(cfg.WorkspaceRoot)
+	if err := cfg.Validate(); err != nil {
+		return cfg, err
+	}
 	return cfg, nil
 }
 
@@ -117,6 +128,31 @@ func (c *Config) derivePaths() {
 	if c.WorkspaceRoot == "" {
 		c.WorkspaceRoot = filepath.Join(c.DataDir, "workspace")
 	}
+}
+
+// Validate rejects unsafe or incomplete HTTP exposure configuration.
+func (c Config) Validate() error {
+	userSet := c.HTTPAuthUser != ""
+	passwordSet := c.HTTPAuthPassword != ""
+	if userSet != passwordSet {
+		return fmt.Errorf("AUTH_USER and AUTH_PASSWORD must be configured together")
+	}
+
+	host, _, err := net.SplitHostPort(c.Addr)
+	if err != nil {
+		return fmt.Errorf("invalid ADDR %q: %w", c.Addr, err)
+	}
+	host = strings.Trim(host, "[]")
+	if userSet {
+		return nil
+	}
+	if strings.EqualFold(host, "localhost") {
+		return nil
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return nil
+	}
+	return fmt.Errorf("ADDR %q is not loopback; configure AUTH_USER and AUTH_PASSWORD before remote listening", c.Addr)
 }
 
 func absOrSelf(p string) string {
@@ -193,6 +229,10 @@ func assign(cfg *Config, key, value string) error {
 	switch strings.ToUpper(strings.TrimSpace(key)) {
 	case "ADDR", "LISTEN":
 		cfg.Addr = value
+	case "AUTH_USER":
+		cfg.HTTPAuthUser = value
+	case "AUTH_PASSWORD":
+		cfg.HTTPAuthPassword = value
 	case "DATA_DIR":
 		cfg.DataDir = value
 	case "DB_PATH", "DB":

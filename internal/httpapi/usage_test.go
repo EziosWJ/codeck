@@ -123,7 +123,9 @@ func TestPriceCRUDAndRestore(t *testing.T) {
 	}
 
 	w = httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/prices/restore", nil))
+	req = httptest.NewRequest(http.MethodPost, "/api/prices/restore", nil)
+	req.Header.Set("Content-Type", "application/json")
+	h.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("restore = %d %s", w.Code, w.Body.String())
 	}

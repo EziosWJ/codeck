@@ -108,7 +108,7 @@ func run() error {
 
 	codexService := codex.NewService(
 		cfg.CodexBin, cfg.CodexHomeRoot, cfg.WorkspaceRoot,
-		cfg.AuthSource, cfg.DefaultTimeout, log.With("component", "codex"))
+		cfg.AuthSource, cfg.DefaultTimeout, cfg.MaxConcurrentRuns, log.With("component", "codex"))
 
 	// A root context cancelled by SIGINT/SIGTERM; every background run is
 	// derived from it so shutdown stops Codex processes promptly.
@@ -142,16 +142,11 @@ func run() error {
 		}()
 	}
 
-	sched := scheduler.New(db, codexService, cfg.SchedulerInterval, cfg.MaxConcurrentRuns,
+	sched := scheduler.New(db, codexService, cfg.SchedulerInterval,
 		log.With("component", "scheduler"))
-	if cfg.SchedulerEnabled {
-		sched.Start(ctx)
-	} else {
-		// Dev/viewing mode: the cron loop never runs, so due tasks stay
-		// untouched. Manual "run now" from the UI still works — it is an
-		// explicit action, not an automatic trigger.
-		log.Info("scheduler disabled: automatic task dispatch is off; manual runs still allowed")
-	}
+	// Always bind Scheduler workers to the application lifecycle. The flag only
+	// decides whether the automatic due-task polling loop is started.
+	sched.Start(ctx, cfg.SchedulerEnabled)
 
 	static, err := staticFS()
 	if err != nil {
@@ -171,7 +166,7 @@ func run() error {
 
 	serverErr := make(chan error, 1)
 	go func() {
-		log.Info("web UI and API listening", "url", "http://localhost"+cfg.Addr)
+		log.Info("web UI and API listening", "url", "http://"+cfg.Addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErr <- err
 		}

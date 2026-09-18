@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -111,6 +112,19 @@ func TestProfileCRUDAndValidation(t *testing.T) {
 	}
 	if got.Description != "updated" || got.IsMinimal || !got.IncludeEnvironmentContext {
 		t.Fatalf("update not applied: %+v", got)
+	}
+
+	renamed := got
+	renamed.Name = "renamed"
+	if _, err := db.UpdateProfile(renamed); !errors.Is(err, ErrConflict) {
+		t.Fatalf("rename error = %v, want ErrConflict", err)
+	}
+	unchanged, err := db.GetProfile(got.ID)
+	if err != nil {
+		t.Fatalf("GetProfile after rejected rename: %v", err)
+	}
+	if unchanged.Name != "minimal" {
+		t.Fatalf("name changed after rejected rename: %q", unchanged.Name)
 	}
 
 	list, err := db.ListProfiles()
@@ -286,8 +300,30 @@ func TestTaskLifecycleAndDueSelection(t *testing.T) {
 	if err := db.DeleteTask(due.ID); err != nil {
 		t.Fatalf("DeleteTask: %v", err)
 	}
-	if runs, _ := db.ListTaskRuns(due.ID, 10); len(runs) != 0 {
-		t.Fatalf("runs survived task delete: %d", len(runs))
+	if _, err := db.GetTask(due.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetTask after soft delete = %v, want ErrNotFound", err)
+	}
+	if _, err := db.UpdateTask(updated); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("UpdateTask after soft delete = %v, want ErrNotFound", err)
+	}
+	if err := db.DeleteTask(due.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("second DeleteTask = %v, want ErrNotFound", err)
+	}
+
+	runs, err = db.ListTaskRuns(due.ID, 10)
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("task runs after soft delete = %+v, %v; want preserved run", runs, err)
+	}
+	if runs[0].TaskName != "due" || runs[0].Output != "output text" {
+		t.Fatalf("preserved run lost task metadata/output: %+v", runs[0])
+	}
+	recent, err := db.ListRecentRuns(10)
+	if err != nil || len(recent) != 1 || recent[0].TaskName != "due" {
+		t.Fatalf("recent history after task delete = %+v, %v", recent, err)
+	}
+	total, enabled, err = db.CountTasks()
+	if err != nil || total != 2 || enabled != 1 {
+		t.Fatalf("CountTasks after delete = %d/%d, %v; want 2/1", total, enabled, err)
 	}
 }
 
@@ -332,5 +368,62 @@ func TestModelPriceCRUD(t *testing.T) {
 	}
 	if _, err := db.GetModelPrice(created.ID); err != ErrNotFound {
 		t.Fatalf("Get after delete = %v", err)
+	}
+}
+
+func TestConversationAllowsOnlyOneActiveTurn(t *testing.T) {
+	db := newTestDB(t)
+	p, err := db.CreateProfile(Profile{Name: "turn-profile", SandboxMode: "read-only"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := db.CreateConversation(p.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	user1, assistant1, err := db.BeginConversationTurn(c.ID, "first")
+	if err != nil {
+		t.Fatalf("first BeginConversationTurn: %v", err)
+	}
+	if user1.Role != "user" || assistant1.Status != "running" {
+		t.Fatalf("unexpected first turn rows: user=%+v assistant=%+v", user1, assistant1)
+	}
+
+	if _, _, err := db.BeginConversationTurn(c.ID, "must not persist"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("second active turn error=%v, want ErrConflict", err)
+	}
+	messages, err := db.ListMessages(c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 2 {
+		t.Fatalf("conflicting turn inserted rows: got %d messages, want 2", len(messages))
+	}
+
+	if err := db.FinalizeConversationTurn(assistant1.ID, c.ID, "thread-1",
+		"reply", "ok", "", 1, 2, 3); err != nil {
+		t.Fatalf("FinalizeConversationTurn: %v", err)
+	}
+	updated, err := db.GetConversation(c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.ThreadID != "thread-1" {
+		t.Fatalf("thread_id=%q, want thread-1", updated.ThreadID)
+	}
+
+	if _, assistant2, err := db.BeginConversationTurn(c.ID, "second"); err != nil {
+		t.Fatalf("new turn after finalize: %v", err)
+	} else if assistant2.Status != "running" {
+		t.Fatalf("second assistant status=%q, want running", assistant2.Status)
+	}
+
+	other, err := db.CreateConversation(p.ID, "other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := db.BeginConversationTurn(other.ID, "parallel conversation"); err != nil {
+		t.Fatalf("different conversation should admit an active turn: %v", err)
 	}
 }

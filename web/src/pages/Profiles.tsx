@@ -274,12 +274,13 @@ function ProfileForm({
     >
       <ErrorBox error={error} />
 
-      <Field label="名称">
+      <Field label="名称" hint={profile ? '名称决定 CODEX_HOME 与会话身份，创建后不可修改。' : undefined}>
         <input
           className="input"
           value={form.name}
           onChange={(e) => set('name', e.target.value)}
           placeholder="例如 gpt5-codex-minimal"
+          disabled={Boolean(profile)}
         />
       </Field>
 

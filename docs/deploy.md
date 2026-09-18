@@ -66,13 +66,16 @@ rsync -a --delete \
 
 ```
 ADDR=127.0.0.1:3000
+# 仅远程监听时需要；两项必须同时设置：
+# AUTH_USER=admin
+# AUTH_PASSWORD=replace-with-a-strong-password
 DATA_DIR=/home/USER/.local/lib/codeck/data
 CODEX_BIN=/home/USER/.nvm/versions/node/v24.16.0/bin/codex
 AUTH_SOURCE=/home/USER/.codex/auth.json
 LOG_LEVEL=info
 ```
 
-把 `USER` 和 `CODEX_BIN` 换成本机值。`CODEX_BIN` 用绝对路径。`ADDR` 写成 `127.0.0.1:端口`，不要只写 `:3000`（会绑到所有网卡）。
+把 `USER` 和 `CODEX_BIN` 换成本机值。`CODEX_BIN` 用绝对路径。默认建议保持 `ADDR=127.0.0.1:端口`。如果显式监听 `0.0.0.0`、`:端口` 或其他非 loopback 地址，Codeck 会要求同时配置 `AUTH_USER` / `AUTH_PASSWORD`；跨机器访问还应由反向代理提供 HTTPS，因为 Basic Auth 本身不加密凭据。
 
 键的完整说明见 [README 配置](../README.md#配置)。此文件由进程 `-config` 读取，**不会**变成子进程环境变量；代理不能写在这里。
 

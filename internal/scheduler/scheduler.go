@@ -65,11 +65,10 @@ type Runner interface {
 // why the cron library is used only as an expression parser: the loop below
 // decides what to run.
 type Scheduler struct {
-	db            *store.DB
-	codex         Runner
-	interval      time.Duration
-	maxConcurrent int
-	log           *slog.Logger
+	db       *store.DB
+	codex    Runner
+	interval time.Duration
+	log      *slog.Logger
 
 	// now is injectable so tests can control the clock.
 	now func() time.Time
@@ -78,49 +77,54 @@ type Scheduler struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
-	// slots bounds how many Codex processes run at once.
-	slots chan struct{}
 	// running guards against a task overlapping with itself.
 	running sync.Map
 }
 
 // New constructs a Scheduler. interval is the due-task poll period.
-func New(db *store.DB, svc Runner, interval time.Duration, maxConcurrent int, log *slog.Logger) *Scheduler {
+func New(db *store.DB, svc Runner, interval time.Duration, log *slog.Logger) *Scheduler {
 	if interval <= 0 {
 		interval = 10 * time.Second
 	}
-	if maxConcurrent < 1 {
-		maxConcurrent = 1
-	}
+	runCtx, cancel := context.WithCancel(context.Background())
 	return &Scheduler{
-		db:            db,
-		codex:         svc,
-		interval:      interval,
-		maxConcurrent: maxConcurrent,
-		log:           log,
-		now:           time.Now,
-		slots:         make(chan struct{}, maxConcurrent),
-		// A usable context before Start so dispatch can be driven directly in
-		// tests and so Stop is safe to call unconditionally.
-		ctx: context.Background(),
+		db:       db,
+		codex:    svc,
+		interval: interval,
+		log:      log,
+		now:      time.Now,
+		// Keep a cancellable context even before Start so direct/manual use in
+		// tests remains owned by Stop rather than context.Background().
+		ctx:    runCtx,
+		cancel: cancel,
 	}
 }
 
-// Start begins polling. It returns immediately; Stop waits for in-flight runs.
-func (s *Scheduler) Start(ctx context.Context) {
+// Start binds every worker to the application context. automatic controls only
+// the due-task polling loop; manual RunNow workers use the same lifecycle even
+// when automatic dispatch is disabled.
+func (s *Scheduler) Start(ctx context.Context, automatic bool) {
+	// New creates a private fallback context. Replace it with the application
+	// root at startup so every subsequent worker observes service shutdown.
+	if s.cancel != nil {
+		s.cancel()
+	}
 	s.ctx, s.cancel = context.WithCancel(ctx)
-	s.wg.Add(1)
-	go s.loop()
-	s.log.Info("scheduler started", "interval", s.interval, "max_concurrent", s.maxConcurrent)
-}
-
-// Stop cancels the loop and waits for running tasks to finish. It is safe to
-// call when the scheduler was never started.
-func (s *Scheduler) Stop() {
-	if s.cancel == nil {
+	if !automatic {
+		s.log.Info("scheduler automatic dispatch disabled; manual runs remain available")
 		return
 	}
-	s.cancel()
+	s.wg.Add(1)
+	go s.loop()
+	s.log.Info("scheduler started", "interval", s.interval)
+}
+
+// Stop cancels the polling loop and all task workers, then waits for every
+// Scheduler-owned goroutine. It is meaningful even when polling was disabled.
+func (s *Scheduler) Stop() {
+	if s.cancel != nil {
+		s.cancel()
+	}
 	s.wg.Wait()
 	s.log.Info("scheduler stopped")
 }
@@ -138,8 +142,15 @@ func (s *Scheduler) RunNow(taskID int64) (int64, error) {
 	return s.spawn(task, "manual")
 }
 
-// Running reports how many Codex processes the scheduler is currently running.
-func (s *Scheduler) Running() int { return len(s.slots) }
+// Running reports how many task executions the scheduler currently owns.
+func (s *Scheduler) Running() int {
+	n := 0
+	s.running.Range(func(_, _ any) bool {
+		n++
+		return true
+	})
+	return n
+}
 
 func (s *Scheduler) loop() {
 	defer s.wg.Done()
@@ -192,9 +203,8 @@ func (s *Scheduler) dispatchDue() {
 func (s *Scheduler) reserveNext(task store.Task, now time.Time) error {
 	if task.IsOneShot() {
 		// A one-shot task has no next slot: retire it (disable + clear the
-		// schedule) so the NULL-next_run_at catch-all in DueTasks never
-		// re-triggers it. The current run still proceeds with the copy of
-		// the task already loaded above.
+		// schedule). NULL next_run_at is parked and can never be due again.
+		// The current run still proceeds with the copy loaded above.
 		if task.RunAt == nil {
 			_ = s.db.ConsumeOneShot(task.ID)
 			return fmt.Errorf("one-shot task %d has no run_at", task.ID)
@@ -237,18 +247,16 @@ func (s *Scheduler) spawn(task store.Task, trigger string) (int64, error) {
 		defer s.wg.Done()
 		defer s.running.Delete(task.ID)
 
-		// Acquire a slot after the overlap check so queued work does not hold
-		// a concurrency slot while it waits.
 		select {
-		case s.slots <- struct{}{}:
-			defer func() { <-s.slots }()
 		case <-s.ctx.Done():
 			s.log.Info("cancelled before starting", "task", task.ID)
-			// Close the record opened above so it does not linger as running.
 			_ = s.db.FinishTaskRun(runID, "failed", "", "cancelled: the service is shutting down", 0, 0, 0)
 			return
+		default:
 		}
 
+		// Process-wide concurrency is enforced by codex.Service.Run. Scheduler
+		// only owns task lifecycle and same-task de-duplication.
 		s.execute(task, runID, trigger)
 	}()
 	return runID, nil
@@ -270,8 +278,12 @@ func (s *Scheduler) execute(task store.Task, runID int64, trigger string) {
 	timeout := time.Duration(task.TimeoutSec) * time.Second
 	log.Info("run started", "profile", profile.Name, "timeout", timeout)
 
+	spec := codex.SpecFromProfile(profile)
+	if strings.TrimSpace(task.WorkDir) != "" {
+		spec.WorkDir = strings.TrimSpace(task.WorkDir)
+	}
 	result, runErr := s.codex.Run(s.ctx, codex.RunOptions{
-		Spec:    codex.SpecFromProfile(profile),
+		Spec:    spec,
 		Prompt:  task.Prompt,
 		Timeout: timeout,
 	})

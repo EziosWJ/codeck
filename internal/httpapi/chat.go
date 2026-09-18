@@ -176,31 +176,15 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The user's turn is persisted before the model is called, so a crash
-	// mid-run cannot lose what was asked.
-	userMsg, err := s.db.AddMessage(store.Message{
-		ConversationID: conversation.ID,
-		Role:           "user",
-		Content:        content,
-		Status:         "ok",
-	})
+	// Persist the user message and reserve the single active assistant turn in
+	// one transaction. A competing request receives ErrConflict and inserts
+	// nothing, so conversation/thread history cannot fork.
+	userMsg, assistant, err := s.db.BeginConversationTurn(conversation.ID, content)
 	if err != nil {
-		writeStoreError(w, err, "save message")
+		writeStoreError(w, err, "begin conversation turn")
 		return
 	}
 	s.autoTitleIfFirst(conversation, content)
-
-	// An assistant row is created up front so the client has a stable id to
-	// attach streamed text to.
-	assistant, err := s.db.AddMessage(store.Message{
-		ConversationID: conversation.ID,
-		Role:           "assistant",
-		Status:         "running",
-	})
-	if err != nil {
-		writeStoreError(w, err, "save message")
-		return
-	}
 
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -275,20 +259,16 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		finalErr = "cancelled before the reply completed"
 	}
 
-	if err := s.db.FinalizeMessage(assistant.ID, reply, finalStatus, finalErr,
-		result.Usage.InputTokens, result.Usage.OutputTokens, result.Duration.Milliseconds()); err != nil {
-		s.log.Error("failed to finalize assistant message", "message", assistant.ID, "error", err)
-	}
-
-	// Record the Codex thread so the next turn resumes the same session.
+	// Persist a new thread id before releasing the running-message reservation.
+	// The next turn can only be admitted after this transaction commits.
 	threadID := conversation.ThreadID
 	if result.ThreadID != "" {
 		threadID = result.ThreadID
-		if result.ThreadID != conversation.ThreadID {
-			if err := s.db.SetConversationThread(conversation.ID, result.ThreadID); err != nil {
-				s.log.Error("failed to store thread id", "conversation", conversation.ID, "error", err)
-			}
-		}
+	}
+	if err := s.db.FinalizeConversationTurn(assistant.ID, conversation.ID, result.ThreadID,
+		reply, finalStatus, finalErr, result.Usage.InputTokens, result.Usage.OutputTokens,
+		result.Duration.Milliseconds()); err != nil {
+		s.log.Error("failed to finalize conversation turn", "message", assistant.ID, "error", err)
 	}
 
 	if runErr != nil {

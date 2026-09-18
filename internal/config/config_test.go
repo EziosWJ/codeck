@@ -48,7 +48,7 @@ func TestExplicitPathBeatsDerivedPath(t *testing.T) {
 }
 
 func TestDefaultsWhenNothingIsSet(t *testing.T) {
-	for _, key := range []string{"DATA_DIR", "DB_PATH", "ADDR", "CODEX_BIN", "SCHEDULER_INTERVAL"} {
+	for _, key := range []string{"DATA_DIR", "DB_PATH", "ADDR", "AUTH_USER", "AUTH_PASSWORD", "CODEX_BIN", "SCHEDULER_INTERVAL"} {
 		os.Unsetenv(EnvPrefix + key)
 	}
 	t.Chdir(t.TempDir())
@@ -57,8 +57,8 @@ func TestDefaultsWhenNothingIsSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Addr != ":8080" {
-		t.Errorf("Addr = %q, want :8080", cfg.Addr)
+	if cfg.Addr != "127.0.0.1:8080" {
+		t.Errorf("Addr = %q, want 127.0.0.1:8080", cfg.Addr)
 	}
 	if cfg.SchedulerInterval != 10*time.Second {
 		t.Errorf("SchedulerInterval = %s, want 10s", cfg.SchedulerInterval)
@@ -81,6 +81,8 @@ func TestConfigFileThenEnvironmentOverrides(t *testing.T) {
 	path := filepath.Join(dir, "codeck.env")
 	content := `# comment line
 ADDR = ":9999"
+AUTH_USER=admin
+AUTH_PASSWORD=secret
 SCHEDULER_INTERVAL=45s
 CODEX_BIN=/from/file/codex
 LOG_LEVEL=debug
@@ -204,5 +206,41 @@ func TestEnsureDirsCreatesEverything(t *testing.T) {
 		if info, err := os.Stat(p); err != nil || !info.IsDir() {
 			t.Errorf("directory %s was not created (%v)", p, err)
 		}
+	}
+}
+
+func TestBasicAuthConfigurationMustBeComplete(t *testing.T) {
+	t.Setenv(EnvPrefix+"AUTH_USER", "admin")
+	t.Setenv(EnvPrefix+"AUTH_PASSWORD", "")
+	if _, err := Load(""); err == nil {
+		t.Fatal("AUTH_USER without AUTH_PASSWORD should be rejected")
+	}
+
+	t.Setenv(EnvPrefix+"AUTH_USER", "")
+	t.Setenv(EnvPrefix+"AUTH_PASSWORD", "secret")
+	if _, err := Load(""); err == nil {
+		t.Fatal("AUTH_PASSWORD without AUTH_USER should be rejected")
+	}
+}
+
+func TestRemoteListenRequiresAuthentication(t *testing.T) {
+	t.Setenv(EnvPrefix+"ADDR", ":8080")
+	t.Setenv(EnvPrefix+"AUTH_USER", "")
+	t.Setenv(EnvPrefix+"AUTH_PASSWORD", "")
+	if _, err := Load(""); err == nil {
+		t.Fatal("non-loopback listen without authentication should be rejected")
+	}
+}
+
+func TestRemoteListenAllowedWithAuthentication(t *testing.T) {
+	t.Setenv(EnvPrefix+"ADDR", "0.0.0.0:8080")
+	t.Setenv(EnvPrefix+"AUTH_USER", "admin")
+	t.Setenv(EnvPrefix+"AUTH_PASSWORD", "secret")
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.HTTPAuthUser != "admin" || cfg.HTTPAuthPassword != "secret" {
+		t.Fatalf("basic auth configuration was not loaded")
 	}
 }

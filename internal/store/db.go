@@ -156,10 +156,27 @@ CREATE TABLE model_prices (
     updated_at                    TEXT    NOT NULL
 );
 `,
-	// 7: one-shot tasks — schedule_type is 'cron' or 'once', run_at holds the
+	// 7–8: one-shot tasks — schedule_type is 'cron' or 'once', run_at holds the
 	// single fire time (RFC3339, UTC) for 'once' tasks.
 	`ALTER TABLE tasks ADD COLUMN schedule_type TEXT NOT NULL DEFAULT 'cron';`,
 	`ALTER TABLE tasks ADD COLUMN run_at TEXT;`,
+	// 9: serialize active assistant turns per conversation. Close any stale
+	// running rows before installing the invariant so upgrades are deterministic.
+	`
+UPDATE messages
+SET status = 'error',
+    error = 'interrupted: upgraded while this reply was marked running'
+WHERE role = 'assistant' AND status = 'running';
+
+CREATE UNIQUE INDEX idx_messages_one_active_turn
+ON messages(conversation_id)
+WHERE role = 'assistant' AND status = 'running';
+`,
+	// 10: Task deletion becomes logical so task_runs remain durable history.
+	`
+ALTER TABLE tasks ADD COLUMN deleted_at TEXT;
+CREATE INDEX idx_tasks_active_schedule ON tasks(deleted_at, enabled, next_run_at);
+`,
 }
 
 func (d *DB) migrate() error {

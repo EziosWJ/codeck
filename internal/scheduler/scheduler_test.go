@@ -74,7 +74,7 @@ func newTestScheduler(t *testing.T, runner Runner) (*Scheduler, *store.DB) {
 	}
 	t.Cleanup(func() { db.Close() })
 
-	s := New(db, runner, time.Second, 2, testLogger())
+	s := New(db, runner, time.Second, testLogger())
 	t.Cleanup(s.Stop)
 	return s, db
 }
@@ -332,9 +332,11 @@ func TestBrokenCronParksTaskInsteadOfSpinning(t *testing.T) {
 	}
 
 	s.dispatchDue()
+	s.dispatchDue()
+	s.dispatchDue()
 
 	if n := runner.callCount(); n != 0 {
-		t.Errorf("runner called %d times for an unparseable cron, want 0", n)
+		t.Errorf("runner called %d times for an unparseable cron after repeated dispatches, want 0", n)
 	}
 	updated, _ := db.GetTask(task.ID)
 	if updated.NextRunAt != nil {
@@ -405,5 +407,166 @@ func TestRunNowRefusesToOverlapARunningTask(t *testing.T) {
 	})
 	if n := runner.callCount(); n != 1 {
 		t.Errorf("runner called %d times, want 1", n)
+	}
+}
+
+func TestDisabledSchedulerStillOwnsManualRunLifecycle(t *testing.T) {
+	runner := &fakeRunner{
+		block:   make(chan struct{}),
+		started: make(chan struct{}, 1),
+	}
+	s, db := newTestScheduler(t, runner)
+	ctx, cancel := context.WithCancel(context.Background())
+	s.Start(ctx, false)
+
+	p := mustProfile(t, db)
+	task, err := db.CreateTask(store.Task{
+		Name: "manual-only", Prompt: "x", ProfileID: p.ID,
+		CronExpr: "* * * * *", Enabled: true, TimeoutSec: 60,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RunNow(task.ID); err != nil {
+		t.Fatalf("RunNow: %v", err)
+	}
+	<-runner.started
+
+	cancel()
+	stopped := make(chan struct{})
+	go func() {
+		s.Stop()
+		close(stopped)
+	}()
+
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop did not wait for/cancel the manual worker")
+	}
+
+	runs, err := db.ListTaskRuns(task.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runs) != 1 || runs[0].Status != "failed" {
+		t.Fatalf("cancelled manual run = %+v, want one failed run", runs)
+	}
+	if runner.callCount() != 1 {
+		t.Fatalf("runner calls = %d, want 1", runner.callCount())
+	}
+}
+
+func TestTaskWorkDirOverridesProfileWorkDir(t *testing.T) {
+	runner := &fakeRunner{started: make(chan struct{}, 1)}
+	s, db := newTestScheduler(t, runner)
+	p, err := db.CreateProfile(store.Profile{
+		Name: "workdir-profile", SandboxMode: "read-only", WorkDir: "/profile/work",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := db.CreateTask(store.Task{
+		Name: "workdir-task", Prompt: "x", ProfileID: p.ID,
+		CronExpr: "* * * * *", Enabled: true, TimeoutSec: 60, WorkDir: " /task/work ",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RunNow(task.ID); err != nil {
+		t.Fatal(err)
+	}
+	<-runner.started
+	waitFor(t, "task workdir run", func() bool { return runner.callCount() == 1 })
+	if got := runner.lastCall(t).Spec.WorkDir; got != "/task/work" {
+		t.Fatalf("Spec.WorkDir=%q, want /task/work", got)
+	}
+}
+
+func TestTaskWorkDirFallsBackToProfile(t *testing.T) {
+	runner := &fakeRunner{started: make(chan struct{}, 1)}
+	s, db := newTestScheduler(t, runner)
+	p, err := db.CreateProfile(store.Profile{
+		Name: "profile-workdir", SandboxMode: "read-only", WorkDir: "/profile/work",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := db.CreateTask(store.Task{
+		Name: "inherit-workdir", Prompt: "x", ProfileID: p.ID,
+		CronExpr: "* * * * *", Enabled: true, TimeoutSec: 60,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RunNow(task.ID); err != nil {
+		t.Fatal(err)
+	}
+	<-runner.started
+	if got := runner.lastCall(t).Spec.WorkDir; got != "/profile/work" {
+		t.Fatalf("Spec.WorkDir=%q, want /profile/work", got)
+	}
+}
+
+func TestTaskWorkDirEmptyLeavesScratchResolutionToService(t *testing.T) {
+	runner := &fakeRunner{started: make(chan struct{}, 1)}
+	s, db := newTestScheduler(t, runner)
+	p := mustProfile(t, db)
+	task, err := db.CreateTask(store.Task{
+		Name: "scratch-workdir", Prompt: "x", ProfileID: p.ID,
+		CronExpr: "* * * * *", Enabled: true, TimeoutSec: 60,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RunNow(task.ID); err != nil {
+		t.Fatal(err)
+	}
+	<-runner.started
+	if got := runner.lastCall(t).Spec.WorkDir; got != "" {
+		t.Fatalf("Spec.WorkDir=%q, want empty so codex.Service uses the scratch workspace", got)
+	}
+}
+
+func TestNullNextRunIsParkedEvenWhenEnabled(t *testing.T) {
+	runner := &fakeRunner{}
+	s, db := newTestScheduler(t, runner)
+	p := mustProfile(t, db)
+	task, err := db.CreateTask(store.Task{
+		Name: "parked", Prompt: "x", ProfileID: p.ID,
+		CronExpr: "* * * * *", Enabled: true, TimeoutSec: 60, NextRunAt: nil,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s.dispatchDue()
+	if runner.callCount() != 0 {
+		t.Fatalf("parked task was dispatched")
+	}
+	got, err := db.GetTask(task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.NextRunAt != nil || !got.Enabled {
+		t.Fatalf("parked task changed unexpectedly: %+v", got)
+	}
+}
+
+func TestRunNowRejectsDeletedTask(t *testing.T) {
+	s, db := newTestScheduler(t, &fakeRunner{})
+	p := mustProfile(t, db)
+	task, err := db.CreateTask(store.Task{
+		Name: "deleted", Prompt: "x", ProfileID: p.ID,
+		CronExpr: "* * * * *", Enabled: true, TimeoutSec: 60,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.DeleteTask(task.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RunNow(task.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("RunNow deleted task error=%v, want ErrNotFound", err)
 	}
 }
