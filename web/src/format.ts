@@ -180,6 +180,8 @@ const LABELS: Record<string, string> = {
   running: '运行中',
   active: '进行中',
   schedule: '定时',
+  once: '一次性',
+  cron: '重复',
   manual: '手动',
   user: '用户',
   assistant: '助手',

@@ -80,7 +80,7 @@ export default function Tasks() {
             任务 <SchedulerBadge enabled={health.data?.scheduler_enabled} />
           </h1>
           <div className="page-desc">
-            定时 Codex 提示词。由后端按 cron 执行，也可立即手动跑一次。
+            定时 Codex 提示词。循环任务按 cron 重复执行，一次性任务在指定年月日时分秒执行一次后自动停用；也可立即手动跑一次。
           </div>
         </div>
         <button
@@ -124,7 +124,8 @@ export default function Tasks() {
               <thead>
                 <tr>
                   <th>任务</th>
-                  <th>Cron</th>
+                  <th>类型</th>
+                  <th>计划</th>
                   <th>启用</th>
                   <th>下次运行</th>
                   <th>上次运行</th>
@@ -171,17 +172,42 @@ export default function Tasks() {
   )
 }
 
+function isOnce(task: Pick<Task, 'schedule_type'>): boolean {
+  return (task.schedule_type ?? 'cron') === 'once'
+}
+
 function toInput(task: Task, override: Partial<TaskInput> = {}): TaskInput {
   return {
     name: task.name ?? '',
     prompt: task.prompt ?? '',
     profile_id: task.profile_id,
     cron_expr: task.cron_expr ?? '',
+    schedule_type: isOnce(task) ? 'once' : 'cron',
+    run_at: task.run_at ?? null,
     enabled: Boolean(task.enabled),
     work_dir: task.work_dir ?? '',
     timeout_sec: task.timeout_sec ?? 0,
     ...override,
   }
+}
+
+/** ISO 时间转 datetime-local 输入值（本地时区，精确到秒）。 */
+function toLocalInputValue(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n: number) => (n < 10 ? `0${n}` : String(n))
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T` +
+    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  )
+}
+
+/** 默认的一次性时间：1 小时后整分 00 秒。 */
+function defaultRunAtLocal(): string {
+  const d = new Date(Date.now() + 60 * 60 * 1000)
+  d.setSeconds(0, 0)
+  return toLocalInputValue(d.toISOString())
 }
 
 function TaskRow({
@@ -215,7 +241,10 @@ function TaskRow({
           </div>
           <div className="small faint">档案：{text(task.profile_name)}</div>
         </td>
-        <td className="mono small nowrap">{text(task.cron_expr)}</td>
+        <td className="small nowrap">{isOnce(task) ? '一次性' : '循环'}</td>
+        <td className="mono small nowrap" title={isOnce(task) ? formatTs(task.run_at) : text(task.cron_expr)}>
+          {isOnce(task) ? `⏱ ${formatTs(task.run_at)}` : text(task.cron_expr)}
+        </td>
         <td>
           <label className="switch">
             <input type="checkbox" checked={Boolean(task.enabled)} onChange={onToggleEnabled} disabled={busy} />
@@ -250,7 +279,7 @@ function TaskRow({
       </tr>
       {expanded ? (
         <tr className="subtable">
-          <td colSpan={7}>
+          <td colSpan={8}>
             <RunHistory taskId={task.id} nonce={historyNonce} />
           </td>
         </tr>
@@ -354,10 +383,15 @@ function TaskForm({
     prompt: task?.prompt ?? '',
     profile_id: task?.profile_id ?? profiles[0]?.id ?? 0,
     cron_expr: task?.cron_expr ?? '*/5 * * * *',
+    schedule_type: task && isOnce(task) ? 'once' : 'cron',
+    run_at: task?.run_at ?? null,
     enabled: task ? Boolean(task.enabled) : true,
     work_dir: task?.work_dir ?? '',
     timeout_sec: task?.timeout_sec ?? 300,
   }))
+  const [runAtLocal, setRunAtLocal] = useState<string>(() =>
+    task && isOnce(task) ? toLocalInputValue(task.run_at) : defaultRunAtLocal(),
+  )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -367,15 +401,26 @@ function TaskForm({
 
   async function submit() {
     if (form.name.trim() === '') return setError('名称为必填。')
-    if (!form.cron_expr.trim()) return setError('cron 表达式为必填。')
     if (!form.profile_id) return setError('请选择档案。')
+    const payload: TaskInput = { ...form }
+    if (form.schedule_type === 'once') {
+      if (!runAtLocal) return setError('请选择执行时间（年月日时分秒）。')
+      const picked = new Date(runAtLocal)
+      if (Number.isNaN(picked.getTime())) return setError('执行时间格式不正确。')
+      if (picked.getTime() <= Date.now()) return setError('一次性任务的执行时间必须是将来时间。')
+      payload.run_at = picked.toISOString()
+      payload.cron_expr = ''
+    } else {
+      if (!form.cron_expr.trim()) return setError('cron 表达式为必填。')
+      payload.run_at = null
+    }
     setSaving(true)
     setError(null)
     try {
       if (task) {
-        onSaved(await updateTask(task.id, form), false)
+        onSaved(await updateTask(task.id, payload), false)
       } else {
-        onSaved(await createTask(form), true)
+        onSaved(await createTask(payload), true)
       }
     } catch (e) {
       setError(errText(e))
@@ -443,14 +488,40 @@ function TaskForm({
           </select>
         </Field>
 
-        <Field label="Cron 表达式" hint="标准五字段 cron，例如 */5 * * * *">
-          <input
-            className="input mono"
-            value={form.cron_expr}
-            onChange={(e) => set('cron_expr', e.target.value)}
-            placeholder="0 9 * * 1-5"
-          />
+        <Field label="任务类型" hint="循环按 cron 重复执行，一次性只跑一次">
+          <select
+            className="select"
+            value={form.schedule_type}
+            onChange={(e) => set('schedule_type', e.target.value as 'cron' | 'once')}
+          >
+            <option value="cron">循环任务</option>
+            <option value="once">一次性任务</option>
+          </select>
         </Field>
+
+        {form.schedule_type === 'once' ? (
+          <Field
+            label="执行时间"
+            hint="年月日时分秒精确到秒，到点执行一次后自动停用；实际触发可能晚一个轮询间隔（默认约10秒）"
+          >
+            <input
+              className="input mono"
+              type="datetime-local"
+              step={1}
+              value={runAtLocal}
+              onChange={(e) => setRunAtLocal(e.target.value)}
+            />
+          </Field>
+        ) : (
+          <Field label="Cron 表达式" hint="标准五字段 cron，例如 */5 * * * *">
+            <input
+              className="input mono"
+              value={form.cron_expr}
+              onChange={(e) => set('cron_expr', e.target.value)}
+              placeholder="0 9 * * 1-5"
+            />
+          </Field>
+        )}
 
         <Field label="超时（秒）">
           <input

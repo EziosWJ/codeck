@@ -223,6 +223,8 @@ export interface Task {
   profile_id: number
   profile_name: string
   cron_expr: string
+  schedule_type: 'cron' | 'once' | string
+  run_at: string | null
   enabled: boolean
   work_dir: string
   timeout_sec: number
@@ -239,13 +241,15 @@ export interface TaskInput {
   prompt: string
   profile_id: number
   cron_expr: string
+  schedule_type: 'cron' | 'once'
+  run_at: string | null
   enabled: boolean
   work_dir: string
   timeout_sec: number
 }
 
 export type RunStatus = 'running' | 'success' | 'failed'
-export type RunTrigger = 'schedule' | 'manual'
+export type RunTrigger = 'schedule' | 'manual' | 'once'
 
 export interface TaskRun {
   id: number
