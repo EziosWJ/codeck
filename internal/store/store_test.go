@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -111,6 +112,19 @@ func TestProfileCRUDAndValidation(t *testing.T) {
 	}
 	if got.Description != "updated" || got.IsMinimal || !got.IncludeEnvironmentContext {
 		t.Fatalf("update not applied: %+v", got)
+	}
+
+	renamed := got
+	renamed.Name = "renamed"
+	if _, err := db.UpdateProfile(renamed); !errors.Is(err, ErrConflict) {
+		t.Fatalf("rename error = %v, want ErrConflict", err)
+	}
+	unchanged, err := db.GetProfile(got.ID)
+	if err != nil {
+		t.Fatalf("GetProfile after rejected rename: %v", err)
+	}
+	if unchanged.Name != "minimal" {
+		t.Fatalf("name changed after rejected rename: %q", unchanged.Name)
 	}
 
 	list, err := db.ListProfiles()

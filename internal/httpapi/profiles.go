@@ -91,12 +91,6 @@ func (s *Server) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	existing, err := s.db.GetProfile(id)
-	if err != nil {
-		writeStoreError(w, err, "profile")
-		return
-	}
-
 	updated := req.toStore()
 	updated.ID = id
 	saved, err := s.db.UpdateProfile(updated)
@@ -105,12 +99,6 @@ func (s *Server) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Renaming a profile moves its CODEX_HOME, so the old directory is removed.
-	if existing.Name != saved.Name {
-		if err := s.codex.RemoveHome(existing.Name); err != nil {
-			s.log.Warn("could not remove the previous codex home", "name", existing.Name, "error", err)
-		}
-	}
 	if _, err := s.codex.EnsureHome(codex.SpecFromProfile(saved)); err != nil {
 		s.log.Error("profile saved but its codex home could not be prepared",
 			"profile", saved.Name, "error", err)

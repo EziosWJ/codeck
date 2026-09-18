@@ -281,6 +281,10 @@ func writeStoreError(w http.ResponseWriter, err error, what string) {
 		writeError(w, http.StatusNotFound, "%s not found", what)
 		return
 	}
+	if errors.Is(err, store.ErrConflict) {
+		writeError(w, http.StatusConflict, "%v", err)
+		return
+	}
 	writeError(w, http.StatusInternalServerError, "%s: %v", what, err)
 }
 

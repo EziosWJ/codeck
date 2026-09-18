@@ -12,6 +12,10 @@ import (
 // ErrNotFound is returned when a row does not exist.
 var ErrNotFound = errors.New("not found")
 
+// ErrConflict is returned when a requested state transition violates a
+// persisted identity or concurrency invariant.
+var ErrConflict = errors.New("conflict")
+
 // Profile is a Codex configuration. Each profile is materialised on disk as its
 // own CODEX_HOME directory, so profile settings never touch the operator's real
 // ~/.codex/config.toml.
@@ -181,27 +185,32 @@ VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 	return d.GetProfile(id)
 }
 
-// UpdateProfile replaces every mutable field of an existing profile.
+// UpdateProfile replaces every mutable field of an existing profile. Name is
+// intentionally immutable because it is also the profile's filesystem/session identity.
 func (d *DB) UpdateProfile(p Profile) (Profile, error) {
 	if err := p.Validate(); err != nil {
 		return Profile{}, err
 	}
+	existing, err := d.GetProfile(p.ID)
+	if err != nil {
+		return Profile{}, err
+	}
+	if p.Name != existing.Name {
+		return Profile{}, fmt.Errorf("%w: profile name is immutable", ErrConflict)
+	}
 	res, err := d.sql.Exec(`
-UPDATE profiles SET name = ?, description = ?, model = ?, reasoning_effort = ?,
+UPDATE profiles SET description = ?, model = ?, reasoning_effort = ?,
     sandbox_mode = ?, approval_policy = ?, extra_config = ?, work_dir = ?,
     is_minimal = ?, include_permissions_instructions = ?, include_apps_instructions = ?,
     include_collaboration_mode_instructions = ?, include_environment_context = ?,
     updated_at = ?
 WHERE id = ?`,
-		p.Name, p.Description, p.Model, p.ReasoningEffort, p.SandboxMode,
+		p.Description, p.Model, p.ReasoningEffort, p.SandboxMode,
 		p.ApprovalPolicy, p.ExtraConfig, p.WorkDir, boolToInt(p.IsMinimal),
 		boolToInt(p.IncludePermissionsInstructions), boolToInt(p.IncludeAppsInstructions),
 		boolToInt(p.IncludeCollaborationModeInstructions), boolToInt(p.IncludeEnvironmentContext),
 		formatTime(time.Now()), p.ID)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE") {
-			return Profile{}, fmt.Errorf("a profile named %q already exists", p.Name)
-		}
 		return Profile{}, err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
