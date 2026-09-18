@@ -407,3 +407,51 @@ func TestRunNowRefusesToOverlapARunningTask(t *testing.T) {
 		t.Errorf("runner called %d times, want 1", n)
 	}
 }
+
+
+func TestDisabledSchedulerStillOwnsManualRunLifecycle(t *testing.T) {
+	runner := &fakeRunner{
+		block:   make(chan struct{}),
+		started: make(chan struct{}, 1),
+	}
+	s, db := newTestScheduler(t, runner)
+	ctx, cancel := context.WithCancel(context.Background())
+	s.Start(ctx, false)
+
+	p := mustProfile(t, db)
+	task, err := db.CreateTask(store.Task{
+		Name: "manual-only", Prompt: "x", ProfileID: p.ID,
+		CronExpr: "* * * * *", Enabled: true, TimeoutSec: 60,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RunNow(task.ID); err != nil {
+		t.Fatalf("RunNow: %v", err)
+	}
+	<-runner.started
+
+	cancel()
+	stopped := make(chan struct{})
+	go func() {
+		s.Stop()
+		close(stopped)
+	}()
+
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop did not wait for/cancel the manual worker")
+	}
+
+	runs, err := db.ListTaskRuns(task.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runs) != 1 || runs[0].Status != "failed" {
+		t.Fatalf("cancelled manual run = %+v, want one failed run", runs)
+	}
+	if runner.callCount() != 1 {
+		t.Fatalf("runner calls = %d, want 1", runner.callCount())
+	}
+}

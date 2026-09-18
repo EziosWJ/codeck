@@ -92,6 +92,7 @@ func New(db *store.DB, svc Runner, interval time.Duration, maxConcurrent int, lo
 	if maxConcurrent < 1 {
 		maxConcurrent = 1
 	}
+	runCtx, cancel := context.WithCancel(context.Background())
 	return &Scheduler{
 		db:            db,
 		codex:         svc,
@@ -100,27 +101,38 @@ func New(db *store.DB, svc Runner, interval time.Duration, maxConcurrent int, lo
 		log:           log,
 		now:           time.Now,
 		slots:         make(chan struct{}, maxConcurrent),
-		// A usable context before Start so dispatch can be driven directly in
-		// tests and so Stop is safe to call unconditionally.
-		ctx: context.Background(),
+		// Keep a cancellable context even before Start so direct/manual use in
+		// tests remains owned by Stop rather than context.Background().
+		ctx:    runCtx,
+		cancel: cancel,
 	}
 }
 
-// Start begins polling. It returns immediately; Stop waits for in-flight runs.
-func (s *Scheduler) Start(ctx context.Context) {
+// Start binds every worker to the application context. automatic controls only
+// the due-task polling loop; manual RunNow workers use the same lifecycle even
+// when automatic dispatch is disabled.
+func (s *Scheduler) Start(ctx context.Context, automatic bool) {
+	// New creates a private fallback context. Replace it with the application
+	// root at startup so every subsequent worker observes service shutdown.
+	if s.cancel != nil {
+		s.cancel()
+	}
 	s.ctx, s.cancel = context.WithCancel(ctx)
+	if !automatic {
+		s.log.Info("scheduler automatic dispatch disabled; manual runs remain available")
+		return
+	}
 	s.wg.Add(1)
 	go s.loop()
 	s.log.Info("scheduler started", "interval", s.interval, "max_concurrent", s.maxConcurrent)
 }
 
-// Stop cancels the loop and waits for running tasks to finish. It is safe to
-// call when the scheduler was never started.
+// Stop cancels the polling loop and all task workers, then waits for every
+// Scheduler-owned goroutine. It is meaningful even when polling was disabled.
 func (s *Scheduler) Stop() {
-	if s.cancel == nil {
-		return
+	if s.cancel != nil {
+		s.cancel()
 	}
-	s.cancel()
 	s.wg.Wait()
 	s.log.Info("scheduler stopped")
 }

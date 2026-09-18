@@ -144,14 +144,9 @@ func run() error {
 
 	sched := scheduler.New(db, codexService, cfg.SchedulerInterval, cfg.MaxConcurrentRuns,
 		log.With("component", "scheduler"))
-	if cfg.SchedulerEnabled {
-		sched.Start(ctx)
-	} else {
-		// Dev/viewing mode: the cron loop never runs, so due tasks stay
-		// untouched. Manual "run now" from the UI still works — it is an
-		// explicit action, not an automatic trigger.
-		log.Info("scheduler disabled: automatic task dispatch is off; manual runs still allowed")
-	}
+	// Always bind Scheduler workers to the application lifecycle. The flag only
+	// decides whether the automatic due-task polling loop is started.
+	sched.Start(ctx, cfg.SchedulerEnabled)
 
 	static, err := staticFS()
 	if err != nil {
