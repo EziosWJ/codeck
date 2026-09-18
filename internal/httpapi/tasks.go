@@ -202,11 +202,8 @@ func (s *Server) nextRunAfterEdit(existing store.Task, req taskRequest, runAt *t
 	}
 	next, err := scheduler.NextRun(req.CronExpr, now)
 	if err != nil {
-		// The expression was validated above, so this is unreachable in
-		// practice; leaving the schedule empty parks the task safely.
-		s.log.Error("could not compute next run for a validated expression",
-			"cron", req.CronExpr, "error", err)
-		return nil, nil
+		// An enabled task must never be persisted without a concrete next slot.
+		return nil, err
 	}
 	return &next, nil
 }

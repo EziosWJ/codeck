@@ -166,14 +166,13 @@ func (d *DB) GetTask(id int64) (Task, error) {
 	return t, err
 }
 
-// DueTasks returns enabled tasks whose next_run_at has passed. Tasks with a
-// null next_run_at are included so a freshly created or edited task is picked
-// up by the scheduler even before its first schedule is computed.
+// DueTasks returns enabled tasks whose concrete next_run_at has passed.
+// NULL next_run_at is a persisted parked state and is never implicitly due.
 func (d *DB) DueTasks(now time.Time) ([]Task, error) {
 	rows, err := d.sql.Query(`SELECT `+taskCols+` FROM tasks t
 		LEFT JOIN profiles p ON p.id = t.profile_id
-		WHERE t.enabled = 1 AND (t.next_run_at IS NULL OR t.next_run_at <= ?)
-		ORDER BY t.next_run_at IS NULL DESC, t.next_run_at`, formatTime(now))
+		WHERE t.enabled = 1 AND t.next_run_at IS NOT NULL AND t.next_run_at <= ?
+		ORDER BY t.next_run_at`, formatTime(now))
 	if err != nil {
 		return nil, err
 	}
@@ -256,8 +255,7 @@ func (d *DB) SetTaskNextRun(id int64, nextRunAt *time.Time) error {
 }
 
 // ConsumeOneShot retires a one-shot task after its single slot came due: the
-// schedule is cleared and the task is disabled so DueTasks (which re-includes
-// NULL next_run_at rows) never hands it out a second time. The in-flight run
+// schedule is cleared and the task is disabled, leaving it explicitly parked. The in-flight run
 // itself proceeds normally; only future automatic runs are stopped.
 func (d *DB) ConsumeOneShot(id int64) error {
 	_, err := d.sql.Exec(`UPDATE tasks SET enabled = 0, next_run_at = NULL WHERE id = ?`, id)

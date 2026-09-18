@@ -203,9 +203,8 @@ func (s *Scheduler) dispatchDue() {
 func (s *Scheduler) reserveNext(task store.Task, now time.Time) error {
 	if task.IsOneShot() {
 		// A one-shot task has no next slot: retire it (disable + clear the
-		// schedule) so the NULL-next_run_at catch-all in DueTasks never
-		// re-triggers it. The current run still proceeds with the copy of
-		// the task already loaded above.
+		// schedule). NULL next_run_at is parked and can never be due again.
+		// The current run still proceeds with the copy loaded above.
 		if task.RunAt == nil {
 			_ = s.db.ConsumeOneShot(task.ID)
 			return fmt.Errorf("one-shot task %d has no run_at", task.ID)

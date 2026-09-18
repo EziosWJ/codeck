@@ -332,9 +332,11 @@ func TestBrokenCronParksTaskInsteadOfSpinning(t *testing.T) {
 	}
 
 	s.dispatchDue()
+	s.dispatchDue()
+	s.dispatchDue()
 
 	if n := runner.callCount(); n != 0 {
-		t.Errorf("runner called %d times for an unparseable cron, want 0", n)
+		t.Errorf("runner called %d times for an unparseable cron after repeated dispatches, want 0", n)
 	}
 	updated, _ := db.GetTask(task.ID)
 	if updated.NextRunAt != nil {
@@ -525,5 +527,31 @@ func TestTaskWorkDirEmptyLeavesScratchResolutionToService(t *testing.T) {
 	<-runner.started
 	if got := runner.lastCall(t).Spec.WorkDir; got != "" {
 		t.Fatalf("Spec.WorkDir=%q, want empty so codex.Service uses the scratch workspace", got)
+	}
+}
+
+
+func TestNullNextRunIsParkedEvenWhenEnabled(t *testing.T) {
+	runner := &fakeRunner{}
+	s, db := newTestScheduler(t, runner)
+	p := mustProfile(t, db)
+	task, err := db.CreateTask(store.Task{
+		Name: "parked", Prompt: "x", ProfileID: p.ID,
+		CronExpr: "* * * * *", Enabled: true, TimeoutSec: 60, NextRunAt: nil,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s.dispatchDue()
+	if runner.callCount() != 0 {
+		t.Fatalf("parked task was dispatched")
+	}
+	got, err := db.GetTask(task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.NextRunAt != nil || !got.Enabled {
+		t.Fatalf("parked task changed unexpectedly: %+v", got)
 	}
 }
