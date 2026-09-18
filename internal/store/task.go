@@ -10,24 +10,24 @@ import (
 
 // Task is a scheduled Codex invocation.
 type Task struct {
-	ID          int64      `json:"id"`
-	Name        string     `json:"name"`
-	Prompt      string     `json:"prompt"`
-	ProfileID   int64      `json:"profile_id"`
-	ProfileName string     `json:"profile_name"`
-	CronExpr    string     `json:"cron_expr"`
+	ID          int64  `json:"id"`
+	Name        string `json:"name"`
+	Prompt      string `json:"prompt"`
+	ProfileID   int64  `json:"profile_id"`
+	ProfileName string `json:"profile_name"`
+	CronExpr    string `json:"cron_expr"`
 	// ScheduleType is "cron" (repeat) or "once" (fire a single time at RunAt).
-	ScheduleType string     `json:"schedule_type"`
+	ScheduleType string `json:"schedule_type"`
 	// RunAt is the single fire time for "once" tasks, nil otherwise.
-	RunAt       *time.Time `json:"run_at"`
-	Enabled     bool       `json:"enabled"`
-	WorkDir     string     `json:"work_dir"`
-	TimeoutSec  int        `json:"timeout_sec"`
-	LastRunAt   *time.Time `json:"last_run_at"`
-	NextRunAt   *time.Time `json:"next_run_at"`
-	LastStatus  string     `json:"last_status"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	RunAt      *time.Time `json:"run_at"`
+	Enabled    bool       `json:"enabled"`
+	WorkDir    string     `json:"work_dir"`
+	TimeoutSec int        `json:"timeout_sec"`
+	LastRunAt  *time.Time `json:"last_run_at"`
+	NextRunAt  *time.Time `json:"next_run_at"`
+	LastStatus string     `json:"last_status"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
 }
 
 // Schedule types accepted by Task.ScheduleType.
