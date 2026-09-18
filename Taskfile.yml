@@ -106,6 +106,8 @@ tasks:
     env:
       CODECK_CONFIG: '{{.CONFIG}}'
     cmds:
+      # View-only alongside production: `CODECK_SCHEDULER_ENABLED=false ./codeck -config ...`
+      # (or `--no-scheduler`), plus an ADDR and DATA_DIR of its own.
       - ./{{.BINARY}}
 
   dev:
@@ -115,6 +117,11 @@ tasks:
   dev:api:
     desc: Run the backend on :8080 with the Vite dev server in front of it
     deps: [build:web]
+    # The dev backend never fires cron tasks on its own: production owns the
+    # schedule. Override per invocation when you really want dispatch, e.g.
+    # `CODECK_SCHEDULER_ENABLED=true go run .` — with a DATA_DIR of its own.
+    env:
+      CODECK_SCHEDULER_ENABLED: 'false'
     cmds:
       - go run .
 

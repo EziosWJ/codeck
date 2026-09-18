@@ -111,6 +111,52 @@ DATA_DIR=` + dir + `
 	}
 }
 
+func TestSchedulerEnabledDefaultsToTrue(t *testing.T) {
+	os.Unsetenv(EnvPrefix + "SCHEDULER_ENABLED")
+	os.Unsetenv(EnvPrefix + "ENABLE_SCHEDULER")
+	os.Unsetenv(EnvPrefix + "SCHEDULER_DISABLED")
+	os.Unsetenv(EnvPrefix + "DISABLE_SCHEDULER")
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.SchedulerEnabled {
+		t.Error("SchedulerEnabled = false, want the default true")
+	}
+}
+
+func TestSchedulerEnabledParsesCommonSpellings(t *testing.T) {
+	for _, value := range []string{"0", "false", "no", "off", "disable", "FALSE", " No "} {
+		t.Setenv(EnvPrefix+"SCHEDULER_ENABLED", value)
+		cfg, err := Load("")
+		if err != nil {
+			t.Fatalf("Load with SCHEDULER_ENABLED=%q: %v", value, err)
+		}
+		if cfg.SchedulerEnabled {
+			t.Errorf("SCHEDULER_ENABLED=%q: got enabled, want disabled", value)
+		}
+	}
+}
+
+func TestSchedulerDisabledAliasIsNegated(t *testing.T) {
+	t.Setenv(EnvPrefix+"SCHEDULER_DISABLED", "true")
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.SchedulerEnabled {
+		t.Error("SCHEDULER_DISABLED=true: got enabled, want disabled")
+	}
+}
+
+func TestSchedulerEnabledRejectsGarbage(t *testing.T) {
+	t.Setenv(EnvPrefix+"SCHEDULER_ENABLED", "sometimes")
+	if _, err := Load(""); err == nil {
+		t.Error("SCHEDULER_ENABLED=sometimes should be rejected")
+	}
+}
+
 func TestConfigFileRejectsMalformedLines(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bad.env")

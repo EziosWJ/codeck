@@ -180,6 +180,17 @@ systemctl --user stop codeck
 
 开发占用同一端口时先 `stop`，或给开发换 `ADDR`。两边可以同时跑，只要 **端口和 `DATA_DIR` 都不同**。
 
+生产（systemd）默认开着调度；开发只看页面时不要抢跑定时任务：
+
+```bash
+# 二选一：启动参数 --no-scheduler，或环境变量 SCHEDULER_ENABLED=false
+ADDR=127.0.0.1:8080 go run . --no-scheduler
+```
+
+`task dev` 的后端已经默认 `CODECK_SCHEDULER_ENABLED=false`（到期不自动跑，手动「立即执行」仍可用）。
+确认为关可用 `curl --noproxy '*' http://127.0.0.1:8080/api/health` 看 `scheduler_enabled: false`。
+注意开发库（默认仓库 `./data`）和生产库务必分开，否则两进程同开一份 `codeck.db` 会报 SQLITE_BUSY。
+
 ## 故障
 
 | 现象 | 原因 |

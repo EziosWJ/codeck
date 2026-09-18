@@ -24,7 +24,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"schema_version":    schema,
 		"uptime_seconds":    int64(time.Since(s.started).Seconds()),
 		"running_tasks":     s.sched.Running(),
-		"scheduler_enabled": true,
+		"scheduler_enabled": s.cfg.SchedulerEnabled,
 	})
 }
 

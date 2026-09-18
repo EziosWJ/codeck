@@ -50,6 +50,7 @@ func run() error {
 	configPath := flag.String("config", "", "path to a KEY=VALUE config file (optional)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	probeAppServer := flag.Bool("appserver-probe", false, "start Codex App Server, print account JSON, and exit")
+	noScheduler := flag.Bool("no-scheduler", false, "disable automatic cron dispatch (view the UI without firing scheduled tasks)")
 	flag.Parse()
 
 	if *showVersion {
@@ -60,6 +61,9 @@ func run() error {
 	cfg, err := config.Load(*configPath)
 	if err != nil {
 		return err
+	}
+	if *noScheduler {
+		cfg.SchedulerEnabled = false
 	}
 
 	log := newLogger(cfg.LogLevel)
@@ -74,7 +78,8 @@ func run() error {
 	}
 
 	log.Info("starting codeck",
-		"version", version, "addr", cfg.Addr, "data_dir", cfg.DataDir, "db", cfg.DBPath)
+		"version", version, "addr", cfg.Addr, "data_dir", cfg.DataDir, "db", cfg.DBPath,
+		"scheduler_enabled", cfg.SchedulerEnabled)
 
 	db, err := store.Open(cfg.DBPath)
 	if err != nil {
@@ -139,7 +144,14 @@ func run() error {
 
 	sched := scheduler.New(db, codexService, cfg.SchedulerInterval, cfg.MaxConcurrentRuns,
 		log.With("component", "scheduler"))
-	sched.Start(ctx)
+	if cfg.SchedulerEnabled {
+		sched.Start(ctx)
+	} else {
+		// Dev/viewing mode: the cron loop never runs, so due tasks stay
+		// untouched. Manual "run now" from the UI still works — it is an
+		// explicit action, not an automatic trigger.
+		log.Info("scheduler disabled: automatic task dispatch is off; manual runs still allowed")
+	}
 
 	static, err := staticFS()
 	if err != nil {

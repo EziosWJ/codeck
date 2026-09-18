@@ -37,6 +37,11 @@ type Config struct {
 
 	// SchedulerInterval is how often the scheduler polls for due tasks.
 	SchedulerInterval time.Duration
+	// SchedulerEnabled gates the automatic cron dispatch loop. When false the
+	// server still serves the UI/API (and manual "run now" triggers), but due
+	// tasks are never picked up automatically. Handy for opening a second
+	// copy of the code in dev while production owns the schedule.
+	SchedulerEnabled bool
 	// DefaultTimeout is the default per-invocation timeout.
 	DefaultTimeout time.Duration
 	// MaxConcurrentRuns bounds simultaneous codex invocations.
@@ -62,6 +67,7 @@ func Default() Config {
 		WorkspaceRoot:     "",
 		AuthSource:        filepath.Join(home, ".codex", "auth.json"),
 		SchedulerInterval: 10 * time.Second,
+		SchedulerEnabled:  true,
 		DefaultTimeout:    5 * time.Minute,
 		MaxConcurrentRuns: 4,
 		LogLevel:          "info",
@@ -205,6 +211,18 @@ func assign(cfg *Config, key, value string) error {
 			return fmt.Errorf("invalid SCHEDULER_INTERVAL %q: %w", value, err)
 		}
 		cfg.SchedulerInterval = d
+	case "SCHEDULER_ENABLED", "ENABLE_SCHEDULER":
+		enabled, err := parseBool(value)
+		if err != nil {
+			return fmt.Errorf("invalid SCHEDULER_ENABLED %q: want true/false, 1/0, yes/no, on/off", value)
+		}
+		cfg.SchedulerEnabled = enabled
+	case "SCHEDULER_DISABLED", "DISABLE_SCHEDULER":
+		disabled, err := parseBool(value)
+		if err != nil {
+			return fmt.Errorf("invalid SCHEDULER_DISABLED %q: want true/false, 1/0, yes/no, on/off", value)
+		}
+		cfg.SchedulerEnabled = !disabled
 	case "DEFAULT_TIMEOUT":
 		d, err := time.ParseDuration(value)
 		if err != nil {
@@ -224,4 +242,17 @@ func assign(cfg *Config, key, value string) error {
 		// environment must not stop the service from booting.
 	}
 	return nil
+}
+
+// parseBool accepts the strconv set plus the yes/no, on/off and
+// enable/disable spellings people actually write in env files.
+func parseBool(value string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "t", "true", "y", "yes", "on", "enable", "enabled":
+		return true, nil
+	case "0", "f", "false", "n", "no", "off", "disable", "disabled":
+		return false, nil
+	default:
+		return false, fmt.Errorf("not a boolean: %q", value)
+	}
 }

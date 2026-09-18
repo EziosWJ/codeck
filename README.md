@@ -99,7 +99,7 @@ data/                   db、每 Profile 的 CODEX_HOME 与 workspace
 
 前缀 `CODECK_`。也可 `-config` 或 `CODECK_CONFIG` 指向 `KEY=VALUE` 文件（可省略前缀）。后源覆盖先源。未知键忽略。
 
-`ADDR` `DATA_DIR` `DB_PATH` `CODEX_BIN` `CODEX_HOME_ROOT` `WORKSPACE_ROOT` `AUTH_SOURCE` `SCHEDULER_INTERVAL` `DEFAULT_TIMEOUT` `MAX_CONCURRENT_RUNS` `LOG_LEVEL`
+`ADDR` `DATA_DIR` `DB_PATH` `CODEX_BIN` `CODEX_HOME_ROOT` `WORKSPACE_ROOT` `AUTH_SOURCE` `SCHEDULER_INTERVAL` `SCHEDULER_ENABLED` `DEFAULT_TIMEOUT` `MAX_CONCURRENT_RUNS` `LOG_LEVEL`
 
 未显式设置时，`DB_PATH` / `CODEX_HOME_ROOT` / `WORKSPACE_ROOT` 都挂在 `DATA_DIR` 下。
 
@@ -113,6 +113,7 @@ data/                   db、每 Profile 的 CODEX_HOME 与 workspace
 | `WORKSPACE_ROOT` | `$DATA_DIR/workspace` | 各 Profile 的 scratch workspace 父目录 |
 | `AUTH_SOURCE` | `~/.codex/auth.json` | symlink 进各 Profile home 的 auth.json |
 | `SCHEDULER_INTERVAL` | `10s` | 调度轮询间隔 |
+| `SCHEDULER_ENABLED` | `true` | 是否自动跑 cron 到期的任务。开发环境只看页面时设 `false`（或启动加 `--no-scheduler`），到期任务不会被触发，手动「立即执行」仍可用；`GET /api/health` 的 `scheduler_enabled` 会反映此值 |
 | `DEFAULT_TIMEOUT` | `5m` | 单次 Codex 调用默认超时 |
 | `MAX_CONCURRENT_RUNS` | `4` | 最大并发 Codex 进程数 |
 | `LOG_LEVEL` | `info` | 日志级别：`debug` / `info` / `warn` / `error` |

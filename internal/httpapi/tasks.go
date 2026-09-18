@@ -168,7 +168,8 @@ func (s *Server) handleRunTask(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "run task: %v", err)
 		return
 	}
-	s.log.Info("manual task run triggered", "task", id, "run", runID)
+	s.log.Info("manual task run triggered", "task", id, "run", runID,
+		"scheduler_enabled", s.cfg.SchedulerEnabled)
 	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "run_id": runID})
 }
 
