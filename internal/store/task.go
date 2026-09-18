@@ -16,6 +16,10 @@ type Task struct {
 	ProfileID   int64      `json:"profile_id"`
 	ProfileName string     `json:"profile_name"`
 	CronExpr    string     `json:"cron_expr"`
+	// ScheduleType is "cron" (repeat) or "once" (fire a single time at RunAt).
+	ScheduleType string     `json:"schedule_type"`
+	// RunAt is the single fire time for "once" tasks, nil otherwise.
+	RunAt       *time.Time `json:"run_at"`
 	Enabled     bool       `json:"enabled"`
 	WorkDir     string     `json:"work_dir"`
 	TimeoutSec  int        `json:"timeout_sec"`
@@ -25,6 +29,12 @@ type Task struct {
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 }
+
+// Schedule types accepted by Task.ScheduleType.
+const (
+	ScheduleCron = "cron"
+	ScheduleOnce = "once"
+)
 
 // TaskRun is one execution attempt of a task.
 type TaskRun struct {
@@ -51,8 +61,23 @@ func (t *Task) Validate() error {
 	if strings.TrimSpace(t.Prompt) == "" {
 		return fmt.Errorf("prompt is required")
 	}
-	if strings.TrimSpace(t.CronExpr) == "" {
-		return fmt.Errorf("cron_expr is required")
+	t.ScheduleType = strings.TrimSpace(t.ScheduleType)
+	if t.ScheduleType == "" {
+		t.ScheduleType = ScheduleCron
+	}
+	switch t.ScheduleType {
+	case ScheduleOnce:
+		if t.RunAt == nil {
+			return fmt.Errorf("run_at is required for one-shot tasks")
+		}
+		t.CronExpr = ""
+	case ScheduleCron:
+		t.RunAt = nil
+		if strings.TrimSpace(t.CronExpr) == "" {
+			return fmt.Errorf("cron_expr is required")
+		}
+	default:
+		return fmt.Errorf("schedule_type must be %q or %q", ScheduleCron, ScheduleOnce)
 	}
 	if t.TimeoutSec <= 0 {
 		t.TimeoutSec = 300
@@ -60,20 +85,49 @@ func (t *Task) Validate() error {
 	return nil
 }
 
+// IsOneShot reports whether the task fires a single time instead of on a cron.
+func (t *Task) IsOneShot() bool { return t.ScheduleType == ScheduleOnce }
+
+// ParseRunAt parses the run_at value accepted by the API. RFC3339 (what the
+// web UI sends) is preferred; bare "YYYY-MM-DD HH:MM:SS" / "YYYY-MM-DDTHH:MM:SS"
+// values are interpreted in the server's local zone so curl users can pass the
+// wall-clock time they see.
+func ParseRunAt(s string) (time.Time, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}, fmt.Errorf("run_at is required")
+	}
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return t, nil
+	}
+	for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02 15:04:05", "2006-01-02T15:04", "2006-01-02 15:04"} {
+		if t, err := time.ParseInLocation(layout, s, time.Local); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("invalid run_at %q: want RFC3339 or YYYY-MM-DD HH:MM:SS", s)
+}
+
 const taskCols = `t.id, t.name, t.prompt, t.profile_id, COALESCE(p.name, ''), t.cron_expr,
+	t.schedule_type, t.run_at,
 	t.enabled, t.work_dir, t.timeout_sec, t.last_run_at, t.next_run_at, t.last_status,
 	t.created_at, t.updated_at`
 
 func scanTask(sc interface{ Scan(...any) error }) (Task, error) {
 	var t Task
-	var lastRun, nextRun sql.NullString
+	var runAt, lastRun, nextRun sql.NullString
 	var created, updated string
 	err := sc.Scan(&t.ID, &t.Name, &t.Prompt, &t.ProfileID, &t.ProfileName, &t.CronExpr,
+		&t.ScheduleType, &runAt,
 		&t.Enabled, &t.WorkDir, &t.TimeoutSec, &lastRun, &nextRun, &t.LastStatus,
 		&created, &updated)
 	if err != nil {
 		return t, err
 	}
+	if t.ScheduleType == "" {
+		t.ScheduleType = ScheduleCron
+	}
+	t.RunAt = nullTime(runAt)
 	t.LastRunAt = nullTime(lastRun)
 	t.NextRunAt = nullTime(nextRun)
 	t.CreatedAt, _ = parseTime(created)
@@ -146,10 +200,10 @@ func (d *DB) CreateTask(t Task) (Task, error) {
 	}
 	now := formatTime(time.Now())
 	res, err := d.sql.Exec(`
-INSERT INTO tasks (name, prompt, profile_id, cron_expr, enabled, work_dir,
+INSERT INTO tasks (name, prompt, profile_id, cron_expr, schedule_type, run_at, enabled, work_dir,
     timeout_sec, next_run_at, created_at, updated_at)
-VALUES (?,?,?,?,?,?,?,?,?,?)`,
-		t.Name, t.Prompt, t.ProfileID, t.CronExpr, boolToInt(t.Enabled), t.WorkDir,
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+		t.Name, t.Prompt, t.ProfileID, t.CronExpr, t.ScheduleType, nullableTime(t.RunAt), boolToInt(t.Enabled), t.WorkDir,
 		t.TimeoutSec, nullableTime(t.NextRunAt), now, now)
 	if err != nil {
 		return Task{}, err
@@ -170,10 +224,10 @@ func (d *DB) UpdateTask(t Task) (Task, error) {
 		return Task{}, fmt.Errorf("profile %d: %w", t.ProfileID, err)
 	}
 	res, err := d.sql.Exec(`
-UPDATE tasks SET name = ?, prompt = ?, profile_id = ?, cron_expr = ?, enabled = ?,
+UPDATE tasks SET name = ?, prompt = ?, profile_id = ?, cron_expr = ?, schedule_type = ?, run_at = ?, enabled = ?,
     work_dir = ?, timeout_sec = ?, next_run_at = ?, updated_at = ?
 WHERE id = ?`,
-		t.Name, t.Prompt, t.ProfileID, t.CronExpr, boolToInt(t.Enabled), t.WorkDir,
+		t.Name, t.Prompt, t.ProfileID, t.CronExpr, t.ScheduleType, nullableTime(t.RunAt), boolToInt(t.Enabled), t.WorkDir,
 		t.TimeoutSec, nullableTime(t.NextRunAt), formatTime(time.Now()), t.ID)
 	if err != nil {
 		return Task{}, err
@@ -198,6 +252,15 @@ func (d *DB) MarkTaskRun(id int64, lastRunAt time.Time, lastStatus string) error
 func (d *DB) SetTaskNextRun(id int64, nextRunAt *time.Time) error {
 	_, err := d.sql.Exec(`UPDATE tasks SET next_run_at = ? WHERE id = ?`,
 		nullableTime(nextRunAt), id)
+	return err
+}
+
+// ConsumeOneShot retires a one-shot task after its single slot came due: the
+// schedule is cleared and the task is disabled so DueTasks (which re-includes
+// NULL next_run_at rows) never hands it out a second time. The in-flight run
+// itself proceeds normally; only future automatic runs are stopped.
+func (d *DB) ConsumeOneShot(id int64) error {
+	_, err := d.sql.Exec(`UPDATE tasks SET enabled = 0, next_run_at = NULL WHERE id = ?`, id)
 	return err
 }
 

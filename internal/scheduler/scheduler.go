@@ -174,18 +174,36 @@ func (s *Scheduler) dispatchDue() {
 	}
 
 	for _, task := range due {
+		trigger := "schedule"
+		if task.IsOneShot() {
+			trigger = "once"
+		}
 		if err := s.reserveNext(task, now); err != nil {
 			s.log.Error("cannot compute next run; parking this task",
 				"task", task.ID, "name", task.Name, "cron", task.CronExpr, "error", err)
 			continue
 		}
-		s.spawn(task, "schedule")
+		s.spawn(task, trigger)
 	}
 }
 
 // reserveNext advances the task's schedule so the slot it just came due for is
 // not handed out a second time.
 func (s *Scheduler) reserveNext(task store.Task, now time.Time) error {
+	if task.IsOneShot() {
+		// A one-shot task has no next slot: retire it (disable + clear the
+		// schedule) so the NULL-next_run_at catch-all in DueTasks never
+		// re-triggers it. The current run still proceeds with the copy of
+		// the task already loaded above.
+		if task.RunAt == nil {
+			_ = s.db.ConsumeOneShot(task.ID)
+			return fmt.Errorf("one-shot task %d has no run_at", task.ID)
+		}
+		if err := s.db.ConsumeOneShot(task.ID); err != nil {
+			return err
+		}
+		return nil
+	}
 	next, err := NextRun(task.CronExpr, now)
 	if err != nil {
 		// Park the task so a broken expression cannot spin the scheduler.

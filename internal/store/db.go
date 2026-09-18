@@ -156,6 +156,10 @@ CREATE TABLE model_prices (
     updated_at                    TEXT    NOT NULL
 );
 `,
+	// 7: one-shot tasks — schedule_type is 'cron' or 'once', run_at holds the
+	// single fire time (RFC3339, UTC) for 'once' tasks.
+	`ALTER TABLE tasks ADD COLUMN schedule_type TEXT NOT NULL DEFAULT 'cron';`,
+	`ALTER TABLE tasks ADD COLUMN run_at TEXT;`,
 }
 
 func (d *DB) migrate() error {
