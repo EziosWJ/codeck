@@ -455,3 +455,75 @@ func TestDisabledSchedulerStillOwnsManualRunLifecycle(t *testing.T) {
 		t.Fatalf("runner calls = %d, want 1", runner.callCount())
 	}
 }
+
+
+func TestTaskWorkDirOverridesProfileWorkDir(t *testing.T) {
+	runner := &fakeRunner{started: make(chan struct{}, 1)}
+	s, db := newTestScheduler(t, runner)
+	p, err := db.CreateProfile(store.Profile{
+		Name: "workdir-profile", SandboxMode: "read-only", WorkDir: "/profile/work",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := db.CreateTask(store.Task{
+		Name: "workdir-task", Prompt: "x", ProfileID: p.ID,
+		CronExpr: "* * * * *", Enabled: true, TimeoutSec: 60, WorkDir: " /task/work ",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RunNow(task.ID); err != nil {
+		t.Fatal(err)
+	}
+	<-runner.started
+	waitFor(t, "task workdir run", func() bool { return runner.callCount() == 1 })
+	if got := runner.lastCall(t).Spec.WorkDir; got != "/task/work" {
+		t.Fatalf("Spec.WorkDir=%q, want /task/work", got)
+	}
+}
+
+func TestTaskWorkDirFallsBackToProfile(t *testing.T) {
+	runner := &fakeRunner{started: make(chan struct{}, 1)}
+	s, db := newTestScheduler(t, runner)
+	p, err := db.CreateProfile(store.Profile{
+		Name: "profile-workdir", SandboxMode: "read-only", WorkDir: "/profile/work",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := db.CreateTask(store.Task{
+		Name: "inherit-workdir", Prompt: "x", ProfileID: p.ID,
+		CronExpr: "* * * * *", Enabled: true, TimeoutSec: 60,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RunNow(task.ID); err != nil {
+		t.Fatal(err)
+	}
+	<-runner.started
+	if got := runner.lastCall(t).Spec.WorkDir; got != "/profile/work" {
+		t.Fatalf("Spec.WorkDir=%q, want /profile/work", got)
+	}
+}
+
+func TestTaskWorkDirEmptyLeavesScratchResolutionToService(t *testing.T) {
+	runner := &fakeRunner{started: make(chan struct{}, 1)}
+	s, db := newTestScheduler(t, runner)
+	p := mustProfile(t, db)
+	task, err := db.CreateTask(store.Task{
+		Name: "scratch-workdir", Prompt: "x", ProfileID: p.ID,
+		CronExpr: "* * * * *", Enabled: true, TimeoutSec: 60,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RunNow(task.ID); err != nil {
+		t.Fatal(err)
+	}
+	<-runner.started
+	if got := runner.lastCall(t).Spec.WorkDir; got != "" {
+		t.Fatalf("Spec.WorkDir=%q, want empty so codex.Service uses the scratch workspace", got)
+	}
+}

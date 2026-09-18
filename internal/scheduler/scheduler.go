@@ -279,8 +279,12 @@ func (s *Scheduler) execute(task store.Task, runID int64, trigger string) {
 	timeout := time.Duration(task.TimeoutSec) * time.Second
 	log.Info("run started", "profile", profile.Name, "timeout", timeout)
 
+	spec := codex.SpecFromProfile(profile)
+	if strings.TrimSpace(task.WorkDir) != "" {
+		spec.WorkDir = strings.TrimSpace(task.WorkDir)
+	}
 	result, runErr := s.codex.Run(s.ctx, codex.RunOptions{
-		Spec:    codex.SpecFromProfile(profile),
+		Spec:    spec,
 		Prompt:  task.Prompt,
 		Timeout: timeout,
 	})
