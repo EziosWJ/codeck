@@ -91,8 +91,8 @@ func TestHealthDoesNotExposeBasicCredentials(t *testing.T) {
 
 	log := testLogger()
 	svc := codex.NewService("definitely-not-a-real-codex-binary", filepath.Join(dir, "homes"),
-		filepath.Join(dir, "workspaces"), "", time.Second, log)
-	sched := scheduler.New(db, svc, time.Second, 1, log)
+		filepath.Join(dir, "workspaces"), "", time.Second, 1, log)
+	sched := scheduler.New(db, svc, time.Second, log)
 	cfg := config.Default()
 	cfg.DBPath = filepath.Join(dir, "test.db")
 	cfg.HTTPAuthUser = "admin"

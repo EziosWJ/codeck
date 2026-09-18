@@ -74,7 +74,7 @@ func newTestScheduler(t *testing.T, runner Runner) (*Scheduler, *store.DB) {
 	}
 	t.Cleanup(func() { db.Close() })
 
-	s := New(db, runner, time.Second, 2, testLogger())
+	s := New(db, runner, time.Second, testLogger())
 	t.Cleanup(s.Stop)
 	return s, db
 }

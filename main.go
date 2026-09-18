@@ -108,7 +108,7 @@ func run() error {
 
 	codexService := codex.NewService(
 		cfg.CodexBin, cfg.CodexHomeRoot, cfg.WorkspaceRoot,
-		cfg.AuthSource, cfg.DefaultTimeout, log.With("component", "codex"))
+		cfg.AuthSource, cfg.DefaultTimeout, cfg.MaxConcurrentRuns, log.With("component", "codex"))
 
 	// A root context cancelled by SIGINT/SIGTERM; every background run is
 	// derived from it so shutdown stops Codex processes promptly.
@@ -142,7 +142,7 @@ func run() error {
 		}()
 	}
 
-	sched := scheduler.New(db, codexService, cfg.SchedulerInterval, cfg.MaxConcurrentRuns,
+	sched := scheduler.New(db, codexService, cfg.SchedulerInterval,
 		log.With("component", "scheduler"))
 	// Always bind Scheduler workers to the application lifecycle. The flag only
 	// decides whether the automatic due-task polling loop is started.

@@ -18,7 +18,7 @@ func testService(t *testing.T, authSource string) *Service {
 	return NewService("codex",
 		filepath.Join(root, "home"),
 		filepath.Join(root, "ws"),
-		authSource, time.Minute,
+		authSource, time.Minute, 4,
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
@@ -406,7 +406,7 @@ func TestIntegrationRealCodex(t *testing.T) {
 		filepath.Join(t.TempDir(), "home"),
 		filepath.Join(t.TempDir(), "ws"),
 		filepath.Join(home, ".codex", "auth.json"),
-		3*time.Minute,
+		3*time.Minute, 4,
 		slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
 
 	ctx := context.Background()
@@ -460,4 +460,41 @@ func TestIntegrationRealCodex(t *testing.T) {
 		t.Errorf("thread id changed across resume: %q -> %q", first.ThreadID, second.ThreadID)
 	}
 	t.Logf("turn 2: %q, in=%d out=%d, %s", second.Output, second.Usage.InputTokens, second.Usage.OutputTokens, second.Duration)
+}
+
+
+func TestServiceConcurrencyGateHonorsLimitAndCancellation(t *testing.T) {
+	svc := testService(t, "")
+	// testService uses a limit of four; fill all slots directly to exercise the
+	// same gate Run uses without launching external processes.
+	for i := 0; i < 4; i++ {
+		if err := svc.acquireRunSlot(context.Background()); err != nil {
+			t.Fatalf("acquire slot %d: %v", i, err)
+		}
+	}
+	defer func() {
+		for i := 0; i < 4; i++ {
+			svc.releaseRunSlot()
+		}
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() { result <- svc.acquireRunSlot(ctx) }()
+
+	select {
+	case err := <-result:
+		t.Fatalf("fifth slot unexpectedly acquired/returned early: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	cancel()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("blocked acquire error=%v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("blocked acquire did not return after cancellation")
+	}
 }

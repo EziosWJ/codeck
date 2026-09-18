@@ -65,11 +65,10 @@ type Runner interface {
 // why the cron library is used only as an expression parser: the loop below
 // decides what to run.
 type Scheduler struct {
-	db            *store.DB
-	codex         Runner
-	interval      time.Duration
-	maxConcurrent int
-	log           *slog.Logger
+	db       *store.DB
+	codex    Runner
+	interval time.Duration
+	log      *slog.Logger
 
 	// now is injectable so tests can control the clock.
 	now func() time.Time
@@ -78,29 +77,22 @@ type Scheduler struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
-	// slots bounds how many Codex processes run at once.
-	slots chan struct{}
 	// running guards against a task overlapping with itself.
 	running sync.Map
 }
 
 // New constructs a Scheduler. interval is the due-task poll period.
-func New(db *store.DB, svc Runner, interval time.Duration, maxConcurrent int, log *slog.Logger) *Scheduler {
+func New(db *store.DB, svc Runner, interval time.Duration, log *slog.Logger) *Scheduler {
 	if interval <= 0 {
 		interval = 10 * time.Second
 	}
-	if maxConcurrent < 1 {
-		maxConcurrent = 1
-	}
 	runCtx, cancel := context.WithCancel(context.Background())
 	return &Scheduler{
-		db:            db,
-		codex:         svc,
-		interval:      interval,
-		maxConcurrent: maxConcurrent,
-		log:           log,
-		now:           time.Now,
-		slots:         make(chan struct{}, maxConcurrent),
+		db:       db,
+		codex:    svc,
+		interval: interval,
+		log:      log,
+		now:      time.Now,
 		// Keep a cancellable context even before Start so direct/manual use in
 		// tests remains owned by Stop rather than context.Background().
 		ctx:    runCtx,
@@ -124,7 +116,7 @@ func (s *Scheduler) Start(ctx context.Context, automatic bool) {
 	}
 	s.wg.Add(1)
 	go s.loop()
-	s.log.Info("scheduler started", "interval", s.interval, "max_concurrent", s.maxConcurrent)
+	s.log.Info("scheduler started", "interval", s.interval)
 }
 
 // Stop cancels the polling loop and all task workers, then waits for every
@@ -150,8 +142,15 @@ func (s *Scheduler) RunNow(taskID int64) (int64, error) {
 	return s.spawn(task, "manual")
 }
 
-// Running reports how many Codex processes the scheduler is currently running.
-func (s *Scheduler) Running() int { return len(s.slots) }
+// Running reports how many task executions the scheduler currently owns.
+func (s *Scheduler) Running() int {
+	n := 0
+	s.running.Range(func(_, _ any) bool {
+		n++
+		return true
+	})
+	return n
+}
 
 func (s *Scheduler) loop() {
 	defer s.wg.Done()
@@ -249,18 +248,16 @@ func (s *Scheduler) spawn(task store.Task, trigger string) (int64, error) {
 		defer s.wg.Done()
 		defer s.running.Delete(task.ID)
 
-		// Acquire a slot after the overlap check so queued work does not hold
-		// a concurrency slot while it waits.
 		select {
-		case s.slots <- struct{}{}:
-			defer func() { <-s.slots }()
 		case <-s.ctx.Done():
 			s.log.Info("cancelled before starting", "task", task.ID)
-			// Close the record opened above so it does not linger as running.
 			_ = s.db.FinishTaskRun(runID, "failed", "", "cancelled: the service is shutting down", 0, 0, 0)
 			return
+		default:
 		}
 
+		// Process-wide concurrency is enforced by codex.Service.Run. Scheduler
+		// only owns task lifecycle and same-task de-duplication.
 		s.execute(task, runID, trigger)
 	}()
 	return runID, nil

@@ -70,6 +70,7 @@ type Service struct {
 	authSource     string
 	defaultTimeout time.Duration
 	log            *slog.Logger
+	runSlots       chan struct{}
 
 	// homeMu serialises CODEX_HOME provisioning so two concurrent runs for the
 	// same profile cannot interleave writes to config.toml.
@@ -77,7 +78,12 @@ type Service struct {
 }
 
 // NewService constructs a Service. bin may be a bare name resolved via PATH.
-func NewService(bin, homeRoot, workspaceRoot, authSource string, defaultTimeout time.Duration, log *slog.Logger) *Service {
+// maxConcurrent is the process-wide limit for model-bearing codex exec calls.
+func NewService(bin, homeRoot, workspaceRoot, authSource string, defaultTimeout time.Duration,
+	maxConcurrent int, log *slog.Logger) *Service {
+	if maxConcurrent < 1 {
+		maxConcurrent = 1
+	}
 	return &Service{
 		bin:            bin,
 		homeRoot:       homeRoot,
@@ -85,6 +91,7 @@ func NewService(bin, homeRoot, workspaceRoot, authSource string, defaultTimeout 
 		authSource:     authSource,
 		defaultTimeout: defaultTimeout,
 		log:            log,
+		runSlots:       make(chan struct{}, maxConcurrent),
 	}
 }
 
@@ -114,6 +121,11 @@ func (s *Service) Run(ctx context.Context, opts RunOptions) (Result, error) {
 	if err != nil {
 		return result, err
 	}
+
+	if err := s.acquireRunSlot(ctx); err != nil {
+		return result, err
+	}
+	defer s.releaseRunSlot()
 
 	timeout := opts.Timeout
 	if timeout <= 0 {
@@ -218,6 +230,19 @@ func (s *Service) Run(ctx context.Context, opts RunOptions) (Result, error) {
 		}
 	}
 	return result, nil
+}
+
+func (s *Service) acquireRunSlot(ctx context.Context) error {
+	select {
+	case s.runSlots <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("waiting for codex execution slot: %w", ctx.Err())
+	}
+}
+
+func (s *Service) releaseRunSlot() {
+	<-s.runSlots
 }
 
 // buildArgs assembles the CLI arguments for a new or resumed turn.
