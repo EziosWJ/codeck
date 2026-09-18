@@ -166,7 +166,7 @@ func run() error {
 
 	serverErr := make(chan error, 1)
 	go func() {
-		log.Info("web UI and API listening", "url", "http://localhost"+cfg.Addr)
+		log.Info("web UI and API listening", "url", "http://"+cfg.Addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErr <- err
 		}
