@@ -138,7 +138,9 @@ func scanTask(sc interface{ Scan(...any) error }) (Task, error) {
 // ListTasks returns all tasks, newest first.
 func (d *DB) ListTasks() ([]Task, error) {
 	rows, err := d.sql.Query(`SELECT ` + taskCols + ` FROM tasks t
-		LEFT JOIN profiles p ON p.id = t.profile_id ORDER BY t.id DESC`)
+		LEFT JOIN profiles p ON p.id = t.profile_id
+		WHERE t.deleted_at IS NULL
+		ORDER BY t.id DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +160,8 @@ func (d *DB) ListTasks() ([]Task, error) {
 // GetTask loads one task by id.
 func (d *DB) GetTask(id int64) (Task, error) {
 	row := d.sql.QueryRow(`SELECT `+taskCols+` FROM tasks t
-		LEFT JOIN profiles p ON p.id = t.profile_id WHERE t.id = ?`, id)
+		LEFT JOIN profiles p ON p.id = t.profile_id
+		WHERE t.id = ? AND t.deleted_at IS NULL`, id)
 	t, err := scanTask(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return t, ErrNotFound
@@ -171,7 +174,8 @@ func (d *DB) GetTask(id int64) (Task, error) {
 func (d *DB) DueTasks(now time.Time) ([]Task, error) {
 	rows, err := d.sql.Query(`SELECT `+taskCols+` FROM tasks t
 		LEFT JOIN profiles p ON p.id = t.profile_id
-		WHERE t.enabled = 1 AND t.next_run_at IS NOT NULL AND t.next_run_at <= ?
+		WHERE t.deleted_at IS NULL
+		  AND t.enabled = 1 AND t.next_run_at IS NOT NULL AND t.next_run_at <= ?
 		ORDER BY t.next_run_at`, formatTime(now))
 	if err != nil {
 		return nil, err
@@ -225,7 +229,7 @@ func (d *DB) UpdateTask(t Task) (Task, error) {
 	res, err := d.sql.Exec(`
 UPDATE tasks SET name = ?, prompt = ?, profile_id = ?, cron_expr = ?, schedule_type = ?, run_at = ?, enabled = ?,
     work_dir = ?, timeout_sec = ?, next_run_at = ?, updated_at = ?
-WHERE id = ?`,
+WHERE id = ? AND deleted_at IS NULL`,
 		t.Name, t.Prompt, t.ProfileID, t.CronExpr, t.ScheduleType, nullableTime(t.RunAt), boolToInt(t.Enabled), t.WorkDir,
 		t.TimeoutSec, nullableTime(t.NextRunAt), formatTime(time.Now()), t.ID)
 	if err != nil {
@@ -241,7 +245,7 @@ WHERE id = ?`,
 // not touch next_run_at: the schedule is advanced separately, before a run
 // starts, so that a slow task cannot be re-triggered on every scheduler tick.
 func (d *DB) MarkTaskRun(id int64, lastRunAt time.Time, lastStatus string) error {
-	_, err := d.sql.Exec(`UPDATE tasks SET last_run_at = ?, last_status = ? WHERE id = ?`,
+	_, err := d.sql.Exec(`UPDATE tasks SET last_run_at = ?, last_status = ? WHERE id = ? AND deleted_at IS NULL`,
 		formatTime(lastRunAt), lastStatus, id)
 	return err
 }
@@ -249,7 +253,7 @@ func (d *DB) MarkTaskRun(id int64, lastRunAt time.Time, lastStatus string) error
 // SetTaskNextRun reserves the next scheduled slot for a task. Passing nil
 // clears the schedule, which parks the task until it is re-enabled or edited.
 func (d *DB) SetTaskNextRun(id int64, nextRunAt *time.Time) error {
-	_, err := d.sql.Exec(`UPDATE tasks SET next_run_at = ? WHERE id = ?`,
+	_, err := d.sql.Exec(`UPDATE tasks SET next_run_at = ? WHERE id = ? AND deleted_at IS NULL`,
 		nullableTime(nextRunAt), id)
 	return err
 }
@@ -258,13 +262,18 @@ func (d *DB) SetTaskNextRun(id int64, nextRunAt *time.Time) error {
 // schedule is cleared and the task is disabled, leaving it explicitly parked. The in-flight run
 // itself proceeds normally; only future automatic runs are stopped.
 func (d *DB) ConsumeOneShot(id int64) error {
-	_, err := d.sql.Exec(`UPDATE tasks SET enabled = 0, next_run_at = NULL WHERE id = ?`, id)
+	_, err := d.sql.Exec(`UPDATE tasks SET enabled = 0, next_run_at = NULL WHERE id = ? AND deleted_at IS NULL`, id)
 	return err
 }
 
-// DeleteTask removes a task and its run history.
+// DeleteTask logically deletes a task while preserving task_runs as durable
+// history. Deleted tasks are disabled and have no future automatic slot.
 func (d *DB) DeleteTask(id int64) error {
-	res, err := d.sql.Exec(`DELETE FROM tasks WHERE id = ?`, id)
+	now := formatTime(time.Now())
+	res, err := d.sql.Exec(`
+UPDATE tasks
+SET deleted_at = ?, enabled = 0, next_run_at = NULL, updated_at = ?
+WHERE id = ? AND deleted_at IS NULL`, now, now, id)
 	if err != nil {
 		return err
 	}
@@ -276,7 +285,7 @@ func (d *DB) DeleteTask(id int64) error {
 
 // CountTasks returns total and enabled task counts.
 func (d *DB) CountTasks() (total, enabled int, err error) {
-	err = d.sql.QueryRow(`SELECT COUNT(*), COALESCE(SUM(enabled), 0) FROM tasks`).Scan(&total, &enabled)
+	err = d.sql.QueryRow(`SELECT COUNT(*), COALESCE(SUM(enabled), 0) FROM tasks WHERE deleted_at IS NULL`).Scan(&total, &enabled)
 	return total, enabled, err
 }
 
@@ -307,10 +316,14 @@ func scanTaskRun(sc interface{ Scan(...any) error }) (TaskRun, error) {
 // StartTaskRun opens a run row in the running state.
 func (d *DB) StartTaskRun(taskID int64, trigger string) (int64, error) {
 	res, err := d.sql.Exec(`
-INSERT INTO task_runs (task_id, status, trigger, started_at) VALUES (?,?,?,?)`,
-		taskID, "running", trigger, formatTime(time.Now()))
+INSERT INTO task_runs (task_id, status, trigger, started_at)
+SELECT id, ?, ?, ? FROM tasks WHERE id = ? AND deleted_at IS NULL`,
+		"running", trigger, formatTime(time.Now()), taskID)
 	if err != nil {
 		return 0, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return 0, ErrNotFound
 	}
 	return res.LastInsertId()
 }

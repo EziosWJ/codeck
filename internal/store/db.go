@@ -172,6 +172,11 @@ CREATE UNIQUE INDEX idx_messages_one_active_turn
 ON messages(conversation_id)
 WHERE role = 'assistant' AND status = 'running';
 `,
+	// 10: Task deletion becomes logical so task_runs remain durable history.
+	`
+ALTER TABLE tasks ADD COLUMN deleted_at TEXT;
+CREATE INDEX idx_tasks_active_schedule ON tasks(deleted_at, enabled, next_run_at);
+`,
 }
 
 func (d *DB) migrate() error {

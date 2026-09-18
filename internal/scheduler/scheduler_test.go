@@ -555,3 +555,22 @@ func TestNullNextRunIsParkedEvenWhenEnabled(t *testing.T) {
 		t.Fatalf("parked task changed unexpectedly: %+v", got)
 	}
 }
+
+
+func TestRunNowRejectsDeletedTask(t *testing.T) {
+	s, db := newTestScheduler(t, &fakeRunner{})
+	p := mustProfile(t, db)
+	task, err := db.CreateTask(store.Task{
+		Name: "deleted", Prompt: "x", ProfileID: p.ID,
+		CronExpr: "* * * * *", Enabled: true, TimeoutSec: 60,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.DeleteTask(task.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RunNow(task.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("RunNow deleted task error=%v, want ErrNotFound", err)
+	}
+}

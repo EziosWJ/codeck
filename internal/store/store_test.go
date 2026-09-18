@@ -300,8 +300,30 @@ func TestTaskLifecycleAndDueSelection(t *testing.T) {
 	if err := db.DeleteTask(due.ID); err != nil {
 		t.Fatalf("DeleteTask: %v", err)
 	}
-	if runs, _ := db.ListTaskRuns(due.ID, 10); len(runs) != 0 {
-		t.Fatalf("runs survived task delete: %d", len(runs))
+	if _, err := db.GetTask(due.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetTask after soft delete = %v, want ErrNotFound", err)
+	}
+	if _, err := db.UpdateTask(updated); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("UpdateTask after soft delete = %v, want ErrNotFound", err)
+	}
+	if err := db.DeleteTask(due.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("second DeleteTask = %v, want ErrNotFound", err)
+	}
+
+	runs, err = db.ListTaskRuns(due.ID, 10)
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("task runs after soft delete = %+v, %v; want preserved run", runs, err)
+	}
+	if runs[0].TaskName != "due" || runs[0].Output != "output text" {
+		t.Fatalf("preserved run lost task metadata/output: %+v", runs[0])
+	}
+	recent, err := db.ListRecentRuns(10)
+	if err != nil || len(recent) != 1 || recent[0].TaskName != "due" {
+		t.Fatalf("recent history after task delete = %+v, %v", recent, err)
+	}
+	total, enabled, err = db.CountTasks()
+	if err != nil || total != 2 || enabled != 1 {
+		t.Fatalf("CountTasks after delete = %d/%d, %v; want 2/1", total, enabled, err)
 	}
 }
 
