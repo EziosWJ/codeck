@@ -39,9 +39,13 @@ async function readError(res: Response): Promise<string> {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response
   try {
+    const method = (init?.method ?? 'GET').toUpperCase()
+    const mutation = method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE'
+    const headers = new Headers(init?.headers)
+    if (mutation) headers.set('Content-Type', 'application/json')
     res = await fetch(BASE + path, {
       ...init,
-      headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
+      headers,
     })
   } catch (e) {
     throw new ApiError(`无法连接服务器：${e instanceof Error ? e.message : String(e)}`)

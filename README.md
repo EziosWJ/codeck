@@ -2,7 +2,7 @@
 
 ## 简介
 
-Codeck 是跑在本机的 Codex 控制台：把 Codex CLI 包一层 Web UI，让定时、重复执行的 prompt 可管理、可追溯。它只 `exec` 本机 `codex`，不调任何模型 HTTP API；单二进制 + 一份 SQLite 即跑，默认监听 `:8080`，数据在 `./data/`。
+Codeck 是跑在本机的 Codex 控制台：把 Codex CLI 包一层 Web UI，让定时、重复执行的 prompt 可管理、可追溯。它只 `exec` 本机 `codex`，不调任何模型 HTTP API；单二进制 + 一份 SQLite 即跑，默认仅监听 `127.0.0.1:8080`，数据在 `./data/`。
 
 三件事：
 
@@ -105,13 +105,15 @@ data/                   db、每 Profile 的 CODEX_HOME 与 workspace
 
 前缀 `CODECK_`。也可 `-config` 或 `CODECK_CONFIG` 指向 `KEY=VALUE` 文件（可省略前缀）。后源覆盖先源。未知键忽略。
 
-`ADDR` `DATA_DIR` `DB_PATH` `CODEX_BIN` `CODEX_HOME_ROOT` `WORKSPACE_ROOT` `AUTH_SOURCE` `SCHEDULER_INTERVAL` `SCHEDULER_ENABLED` `DEFAULT_TIMEOUT` `MAX_CONCURRENT_RUNS` `LOG_LEVEL`
+`ADDR` `AUTH_USER` `AUTH_PASSWORD` `DATA_DIR` `DB_PATH` `CODEX_BIN` `CODEX_HOME_ROOT` `WORKSPACE_ROOT` `AUTH_SOURCE` `SCHEDULER_INTERVAL` `SCHEDULER_ENABLED` `DEFAULT_TIMEOUT` `MAX_CONCURRENT_RUNS` `LOG_LEVEL`
 
-未显式设置时，`DB_PATH` / `CODEX_HOME_ROOT` / `WORKSPACE_ROOT` 都挂在 `DATA_DIR` 下。
+未显式设置时，`DB_PATH` / `CODEX_HOME_ROOT` / `WORKSPACE_ROOT` 都挂在 `DATA_DIR` 下。默认只监听 loopback；如需监听 `0.0.0.0`、`:8080` 或其他非 loopback 地址，必须同时配置 `AUTH_USER` / `AUTH_PASSWORD`。Basic Auth 只编码、不加密凭据，跨机器访问应由 Caddy/Nginx 等提供 HTTPS。
 
 | 键 | 默认值 | 说明 |
 |---|---|---|
-| `ADDR` | `:8080` | HTTP 监听地址，如 `:9090`、`127.0.0.1:8080` |
+| `ADDR` | `127.0.0.1:8080` | HTTP 监听地址；未配置 Basic Auth 时只能监听 loopback |
+| `AUTH_USER` | 空 | HTTP Basic Auth 用户名；必须与 `AUTH_PASSWORD` 同时配置 |
+| `AUTH_PASSWORD` | 空 | HTTP Basic Auth 密码；远程监听时必须配置 |
 | `DATA_DIR` | `./data` | 数据根目录 |
 | `DB_PATH` | `$DATA_DIR/codeck.db` | SQLite 数据库路径 |
 | `CODEX_BIN` | `codex` | Codex CLI 可执行文件名或路径 |

@@ -2,13 +2,17 @@
 package httpapi
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
+	"mime"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -102,7 +106,63 @@ func (s *Server) Handler() http.Handler {
 	})
 
 	mux.HandleFunc("/", s.handleStatic)
-	return s.withLogging(mux)
+
+	var handler http.Handler = mux
+	handler = s.withRequestSafety(handler)
+	if s.cfg.HTTPAuthUser != "" && s.cfg.HTTPAuthPassword != "" {
+		handler = s.withBasicAuth(handler)
+	}
+	return s.withLogging(handler)
+}
+
+// withBasicAuth protects both the UI and API when credentials are configured.
+func (s *Server) withBasicAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, password, ok := r.BasicAuth()
+		if !ok || !constantTimeEqual(user, s.cfg.HTTPAuthUser) ||
+			!constantTimeEqual(password, s.cfg.HTTPAuthPassword) {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Codeck"`)
+			writeError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func constantTimeEqual(a, b string) bool {
+	ha := sha256.Sum256([]byte(a))
+	hb := sha256.Sum256([]byte(b))
+	return subtle.ConstantTimeCompare(ha[:], hb[:]) == 1
+}
+
+// withRequestSafety applies browser-facing checks to mutating JSON API calls.
+func (s *Server) withRequestSafety(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") && isMutationMethod(r.Method) {
+			mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+			if err != nil || mediaType != "application/json" {
+				writeError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+				return
+			}
+			if origin := r.Header.Get("Origin"); origin != "" {
+				parsed, err := url.Parse(origin)
+				if err != nil || parsed.Host == "" || !strings.EqualFold(parsed.Host, r.Host) {
+					writeError(w, http.StatusForbidden, "cross-origin mutation is not allowed")
+					return
+				}
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func isMutationMethod(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
 }
 
 // withLogging records one line per request and recovers from handler panics so
