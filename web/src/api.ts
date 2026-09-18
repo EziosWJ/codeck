@@ -73,6 +73,7 @@ export interface Health {
   codex_bin: string
   db_path: string
   version: string
+  scheduler_enabled?: boolean
 }
 
 export interface Profile {

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   createTask,
   deleteTask,
+  getHealth,
   listProfiles,
   listTaskRuns,
   listTasks,
@@ -11,12 +12,13 @@ import {
 import type { Profile, Task, TaskInput, TaskRun } from '../api'
 import { errText } from '../api'
 import { useLoad } from '../useLoad'
-import { Empty, ErrorBox, Field, Modal, Spinner, StatusBadge } from '../components/ui'
+import { Empty, ErrorBox, Field, Modal, SchedulerBadge, Spinner, StatusBadge } from '../components/ui'
 import { formatDuration, formatRelative, formatTs, labelOf, text, tokenSummary, truncate } from '../format'
 
 export default function Tasks() {
   const tasks = useLoad(listTasks)
   const profiles = useLoad(listProfiles)
+  const health = useLoad(getHealth)
   const [editing, setEditing] = useState<Task | 'new' | null>(null)
   const [expanded, setExpanded] = useState<number | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -74,7 +76,9 @@ export default function Tasks() {
     <div className="page">
       <div className="page-head">
         <div>
-          <h1 className="page-title">任务</h1>
+          <h1 className="page-title">
+            任务 <SchedulerBadge enabled={health.data?.scheduler_enabled} />
+          </h1>
           <div className="page-desc">
             定时 Codex 提示词。由后端按 cron 执行，也可立即手动跑一次。
           </div>
@@ -93,6 +97,14 @@ export default function Tasks() {
       {notice ? <div className="ok-box" style={{ marginBottom: 14 }}>{notice}</div> : null}
       <ErrorBox error={tasks.error} />
       <ErrorBox error={profiles.error} />
+      {health.data?.scheduler_enabled === false ? (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="card-body hint">
+            定时调度已暂停：cron 到期的任务不会自动执行，但仍可手动「立即运行」。要恢复自动执行，请把后端
+            `SCHEDULER_ENABLED` 设为 true（或去掉 `--no-scheduler`）后重启。
+          </div>
+        </div>
+      ) : null}
       {profileList.length === 0 && !profiles.loading ? (
         <div className="card">
           <div className="card-body hint">

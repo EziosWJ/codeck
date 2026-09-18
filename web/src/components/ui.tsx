@@ -34,6 +34,16 @@ export function StatusBadge({ status }: { status: string | null | undefined }) {
   return <span className={cls}>{labelOf(status)}</span>
 }
 
+/**
+ * Whether the backend's automatic cron dispatch is on.
+ * Renders nothing while unknown (e.g. health not loaded yet).
+ */
+export function SchedulerBadge({ enabled }: { enabled: boolean | null | undefined }) {
+  if (enabled === true) return <span className="badge ok">定时调度运行中</span>
+  if (enabled === false) return <span className="badge run">定时调度已暂停</span>
+  return null
+}
+
 export function Modal({
   title,
   onClose,

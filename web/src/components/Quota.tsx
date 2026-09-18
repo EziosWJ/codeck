@@ -2,6 +2,7 @@ import type { AccountData, RateLimitResetCredit, RateLimitWindow } from '../api'
 import {
   formatCompact,
   formatUnixDate,
+  formatUnixDateTime,
   formatUnixRelative,
   formatWindowMins,
   labelOf,
@@ -110,7 +111,9 @@ function WindowMeter({ window, fallback }: { window: RateLimitWindow; fallback: 
   const tone = remaining <= 10 ? 'hot' : remaining <= 30 ? 'warn' : 'ok'
   const label = formatWindowMins(window.windowDurationMins)
   const name = label === '—' ? fallback : label
-  const reset = formatUnixRelative(window.resetsAt)
+  const relative = formatUnixRelative(window.resetsAt)
+  const eta = formatUnixDateTime(window.resetsAt)
+  const resetText = relative === '—' ? '—' : eta === '—' ? relative : `${relative}（预计 ${eta}）`
   return (
     <div className="quota-window">
       <div className="quota-window-top">
@@ -127,7 +130,7 @@ function WindowMeter({ window, fallback }: { window: RateLimitWindow; fallback: 
       >
         <div className={`quota-fill ${tone}`} style={{ width: `${remaining}%` }} />
       </div>
-      <div className="quota-window-foot">重置于 {reset}</div>
+      <div className="quota-window-foot">重置于 {resetText}</div>
     </div>
   )
 }

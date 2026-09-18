@@ -96,6 +96,16 @@ export function formatUnixDate(sec: number | null | undefined): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+/** Unix seconds → "2026-09-16 14:03" in the viewer's local time (no seconds). */
+export function formatUnixDateTime(sec: number | null | undefined): string {
+  if (!isNum(sec) || sec <= 0) return DASH
+  const d = new Date(sec * 1000)
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+    `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  )
+}
+
 /** Rate-limit window length from minutes. */
 export function formatWindowMins(mins: number | null | undefined): string {
   if (!isNum(mins) || mins <= 0) return DASH

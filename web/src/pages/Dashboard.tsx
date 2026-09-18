@@ -4,7 +4,7 @@ import { getAccount, getDashboard, getHealth, getUsage } from '../api'
 import type { Conversation, TaskRun } from '../api'
 import { useLoad } from '../useLoad'
 import { QuotaPanel } from '../components/Quota'
-import { Empty, ErrorBox, Spinner, StatusBadge } from '../components/ui'
+import { Empty, ErrorBox, SchedulerBadge, Spinner, StatusBadge } from '../components/ui'
 import {
   formatDuration,
   formatRelative,
@@ -47,7 +47,9 @@ export default function Dashboard() {
     <div className="page">
       <div className="page-head">
         <div>
-          <h1 className="page-title">总览</h1>
+          <h1 className="page-title">
+            总览 <SchedulerBadge enabled={health.data?.scheduler_enabled} />
+          </h1>
           <div className="page-desc">
             账号额度与运行状态，每 {REFRESH_MS / 1000} 秒刷新
             {lastLoaded ? ` · 更新于 ${formatTs(lastLoaded)}` : ''}
@@ -152,6 +154,24 @@ export default function Dashboard() {
               <div className="health-item">
                 <div className="health-label">服务</div>
                 <div className="health-value">{text(health.data.version)}</div>
+              </div>
+              <div className="health-item">
+                <div className="health-label">定时调度</div>
+                <div className="health-value">
+                  {health.data.scheduler_enabled === true ? (
+                    <>
+                      <span className="dot ok" />
+                      运行中
+                    </>
+                  ) : health.data.scheduler_enabled === false ? (
+                    <>
+                      <span className="dot" />
+                      已暂停
+                    </>
+                  ) : (
+                    '—'
+                  )}
+                </div>
               </div>
             </div>
           ) : (
