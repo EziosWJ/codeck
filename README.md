@@ -1,8 +1,14 @@
 # Codeck
 
-本机 Codex 控制台：用隔离 Profile 聊天，并按 cron 定时跑 prompt。单二进制，状态在一份 SQLite。不调模型 HTTP API，只 `exec` 本机 `codex`。
+## 简介
 
-默认 `:8080`，数据 `./data/`。
+Codeck 是跑在本机的 Codex 控制台：把 Codex CLI 包一层 Web UI，让定时、重复执行的 prompt 可管理、可追溯。它只 `exec` 本机 `codex`，不调任何模型 HTTP API；单二进制 + 一份 SQLite 即跑，默认监听 `:8080`，数据在 `./data/`。
+
+三件事：
+
+- **隔离聊天**：每个 Profile 是一份独立 Codex 配置（模型、沙箱、批准策略、CODEX_HOME、workspace 全隔离），对话可续聊、可看 token。
+- **定时执行**：循环任务按 cron 跑，一次性任务在指定年月日时分秒跑一次；每次执行留记录（输出、错误、token、耗时）。
+- **看清成本**：账号额度窗口、本机 session 折算的等价 API 成本，都在总览页。
 
 ## 功能
 
@@ -28,9 +34,9 @@
 
 ### 任务
 
-prompt + Profile + cron。调度到期先推进 `next_run_at` 再启动，同一 Task 禁止重叠。可立即手动跑，不改下次时间。展开「记录」看每次 TaskRun。
+prompt + Profile + 计划。循环任务按 cron 重复跑；一次性任务在指定年月日时分秒（精确到秒）跑一次，跑完自动停用。调度到期先推进 `next_run_at` 再启动，同一 Task 禁止重叠。可立即手动跑，不改下次时间。展开「记录」看每次 TaskRun。开发只看页面时可用 `SCHEDULER_ENABLED=false`（或 `--no-scheduler`）暂停自动调度，手动跑不受影响。
 
-![任务：cron 定时跑 prompt，可立即执行](docs/screenshots/tasks.png)
+![任务：cron/一次性定时跑 prompt，可立即执行](docs/screenshots/tasks.png)
 
 ### 用量
 
@@ -78,15 +84,15 @@ data/                   db、每 Profile 的 CODEX_HOME 与 workspace
 |---|---|
 | Profile | 一份 Codex 配置。`name` 即 `data/codex-home/<name>/` 目录名。启动时生成 `config.toml`，把 `AUTH_SOURCE`（默认 `~/.codex/auth.json`）symlink 进 home，不复制 token。 |
 | Conversation | 绑一个 Profile。`thread_id` 用于 `codex exec resume`。聊天 `POST /api/chat/stream`（SSE）。 |
-| Task | prompt + Profile + cron（五字段或 `@daily` / `@every 1h`）+ 超时。`next_run_at` 写库。 |
-| TaskRun | 一次执行：`schedule` / `manual`，输出、错误、token、耗时。 |
+| Task | prompt + Profile + 计划（循环：cron 五字段或 `@daily` / `@every 1h`；一次性：`run_at` 精确到秒）+ 超时。`next_run_at` 写库。 |
+| TaskRun | 一次执行：`schedule` / `once` / `manual`，输出、错误、token、耗时。 |
 | 本地用量 | 扫描各 Profile 与 `~/.codex` 的 session jsonl，按模型汇总 token，用 `model_prices` 表换成 Standard API 美元。 |
 
 磁盘：`data/codeck.db`、`data/codex-home/<profile>/`、`data/workspace/<profile>/`。Profile 可覆盖 `work_dir`。scratch workspace 默认空，避免吃到仓库 `AGENTS.md`。
 
 ## 不变量
 
-- 调度状态在库：到期先推进 `next_run_at` 再启动，避免长任务被下一拍再派。同一 Task 禁止重叠。手动跑不改 `next_run_at`。坏表达式把 `next_run_at` 置空以停转。
+- 调度状态在库：到期先推进 `next_run_at` 再启动，避免长任务被下一拍再派。同一 Task 禁止重叠。手动跑不改 `next_run_at`。坏表达式把 `next_run_at` 置空以停转。一次性任务到期即禁用并清空计划，只跑一次。实际触发时刻可能比设定晚一个轮询间隔。
 - 并发默认 4（`MAX_CONCURRENT_RUNS`）。默认超时 5 分钟。轮询默认 10 秒。
 - 启动把上次留下的 `running` 任务和聊天回复标失败。
 - 调用：`codex exec --json --skip-git-repo-check`，prompt 走 stdin（`-`）。续聊 `exec resume --json <thread_id> -`（resume 无 `-s`，sandbox 靠生成的 config.toml）。超时杀进程组。
