@@ -462,7 +462,6 @@ func TestIntegrationRealCodex(t *testing.T) {
 	t.Logf("turn 2: %q, in=%d out=%d, %s", second.Output, second.Usage.InputTokens, second.Usage.OutputTokens, second.Duration)
 }
 
-
 func TestServiceConcurrencyGateHonorsLimitAndCancellation(t *testing.T) {
 	svc := testService(t, "")
 	// testService uses a limit of four; fill all slots directly to exercise the

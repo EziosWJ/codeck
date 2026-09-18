@@ -209,7 +209,6 @@ func TestEnsureDirsCreatesEverything(t *testing.T) {
 	}
 }
 
-
 func TestBasicAuthConfigurationMustBeComplete(t *testing.T) {
 	t.Setenv(EnvPrefix+"AUTH_USER", "admin")
 	t.Setenv(EnvPrefix+"AUTH_PASSWORD", "")

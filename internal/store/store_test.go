@@ -371,7 +371,6 @@ func TestModelPriceCRUD(t *testing.T) {
 	}
 }
 
-
 func TestConversationAllowsOnlyOneActiveTurn(t *testing.T) {
 	db := newTestDB(t)
 	p, err := db.CreateProfile(Profile{Name: "turn-profile", SandboxMode: "read-only"})

@@ -410,7 +410,6 @@ func TestRunNowRefusesToOverlapARunningTask(t *testing.T) {
 	}
 }
 
-
 func TestDisabledSchedulerStillOwnsManualRunLifecycle(t *testing.T) {
 	runner := &fakeRunner{
 		block:   make(chan struct{}),
@@ -457,7 +456,6 @@ func TestDisabledSchedulerStillOwnsManualRunLifecycle(t *testing.T) {
 		t.Fatalf("runner calls = %d, want 1", runner.callCount())
 	}
 }
-
 
 func TestTaskWorkDirOverridesProfileWorkDir(t *testing.T) {
 	runner := &fakeRunner{started: make(chan struct{}, 1)}
@@ -530,7 +528,6 @@ func TestTaskWorkDirEmptyLeavesScratchResolutionToService(t *testing.T) {
 	}
 }
 
-
 func TestNullNextRunIsParkedEvenWhenEnabled(t *testing.T) {
 	runner := &fakeRunner{}
 	s, db := newTestScheduler(t, runner)
@@ -555,7 +552,6 @@ func TestNullNextRunIsParkedEvenWhenEnabled(t *testing.T) {
 		t.Fatalf("parked task changed unexpectedly: %+v", got)
 	}
 }
-
 
 func TestRunNowRejectsDeletedTask(t *testing.T) {
 	s, db := newTestScheduler(t, &fakeRunner{})
