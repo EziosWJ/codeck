@@ -348,3 +348,61 @@ func TestModelPriceCRUD(t *testing.T) {
 		t.Fatalf("Get after delete = %v", err)
 	}
 }
+
+
+func TestConversationAllowsOnlyOneActiveTurn(t *testing.T) {
+	db := newTestDB(t)
+	p, err := db.CreateProfile(Profile{Name: "turn-profile", SandboxMode: "read-only"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := db.CreateConversation(p.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	user1, assistant1, err := db.BeginConversationTurn(c.ID, "first")
+	if err != nil {
+		t.Fatalf("first BeginConversationTurn: %v", err)
+	}
+	if user1.Role != "user" || assistant1.Status != "running" {
+		t.Fatalf("unexpected first turn rows: user=%+v assistant=%+v", user1, assistant1)
+	}
+
+	if _, _, err := db.BeginConversationTurn(c.ID, "must not persist"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("second active turn error=%v, want ErrConflict", err)
+	}
+	messages, err := db.ListMessages(c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 2 {
+		t.Fatalf("conflicting turn inserted rows: got %d messages, want 2", len(messages))
+	}
+
+	if err := db.FinalizeConversationTurn(assistant1.ID, c.ID, "thread-1",
+		"reply", "ok", "", 1, 2, 3); err != nil {
+		t.Fatalf("FinalizeConversationTurn: %v", err)
+	}
+	updated, err := db.GetConversation(c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.ThreadID != "thread-1" {
+		t.Fatalf("thread_id=%q, want thread-1", updated.ThreadID)
+	}
+
+	if _, assistant2, err := db.BeginConversationTurn(c.ID, "second"); err != nil {
+		t.Fatalf("new turn after finalize: %v", err)
+	} else if assistant2.Status != "running" {
+		t.Fatalf("second assistant status=%q, want running", assistant2.Status)
+	}
+
+	other, err := db.CreateConversation(p.ID, "other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := db.BeginConversationTurn(other.ID, "parallel conversation"); err != nil {
+		t.Fatalf("different conversation should admit an active turn: %v", err)
+	}
+}

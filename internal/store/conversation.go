@@ -207,6 +207,67 @@ func (d *DB) GetMessage(id int64) (Message, error) {
 	return m, err
 }
 
+// BeginConversationTurn atomically appends the user message and reserves the
+// conversation with one running assistant message. The partial unique index on
+// running assistant rows makes this safe across processes sharing the database.
+func (d *DB) BeginConversationTurn(conversationID int64, content string) (Message, Message, error) {
+	tx, err := d.sql.Begin()
+	if err != nil {
+		return Message{}, Message{}, err
+	}
+	rollback := func(err error) (Message, Message, error) {
+		_ = tx.Rollback()
+		return Message{}, Message{}, err
+	}
+
+	now := formatTime(time.Now())
+	userRes, err := tx.Exec(`
+INSERT INTO messages (conversation_id, role, content, status, error,
+    input_tokens, output_tokens, duration_ms, created_at)
+VALUES (?,?,?,?,?,?,?,?,?)`,
+		conversationID, "user", content, "ok", "", 0, 0, 0, now)
+	if err != nil {
+		return rollback(err)
+	}
+	userID, err := userRes.LastInsertId()
+	if err != nil {
+		return rollback(err)
+	}
+
+	assistantRes, err := tx.Exec(`
+INSERT INTO messages (conversation_id, role, content, status, error,
+    input_tokens, output_tokens, duration_ms, created_at)
+VALUES (?,?,?,?,?,?,?,?,?)`,
+		conversationID, "assistant", "", "running", "", 0, 0, 0, now)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return rollback(fmt.Errorf("%w: conversation already has an active turn", ErrConflict))
+		}
+		return rollback(err)
+	}
+	assistantID, err := assistantRes.LastInsertId()
+	if err != nil {
+		return rollback(err)
+	}
+
+	if _, err := tx.Exec(`UPDATE conversations SET updated_at = ? WHERE id = ?`, now, conversationID); err != nil {
+		return rollback(err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Message{}, Message{}, err
+	}
+
+	user, err := d.GetMessage(userID)
+	if err != nil {
+		return Message{}, Message{}, err
+	}
+	assistant, err := d.GetMessage(assistantID)
+	if err != nil {
+		return Message{}, Message{}, err
+	}
+	return user, assistant, nil
+}
+
 // AddMessage appends a message and touches the conversation's updated_at.
 func (d *DB) AddMessage(m Message) (Message, error) {
 	if m.Status == "" {
@@ -240,6 +301,46 @@ UPDATE messages SET content = ?, status = ?, error = ?, input_tokens = ?,
     output_tokens = ?, duration_ms = ? WHERE id = ?`,
 		content, status, errText, inTok, outTok, durationMs, id)
 	return err
+}
+
+// FinalizeConversationTurn updates the Codex thread identity and releases the
+// active-turn reservation in one transaction. Thread state is committed before
+// the assistant row stops being "running", so the next admitted turn cannot
+// observe a stale thread id.
+func (d *DB) FinalizeConversationTurn(messageID, conversationID int64, threadID,
+	content, status, errText string, inTok, outTok int, durationMs int64) error {
+	tx, err := d.sql.Begin()
+	if err != nil {
+		return err
+	}
+	rollback := func(err error) error {
+		_ = tx.Rollback()
+		return err
+	}
+
+	now := formatTime(time.Now())
+	if threadID != "" {
+		if _, err := tx.Exec(`UPDATE conversations SET thread_id = ?, updated_at = ? WHERE id = ?`,
+			threadID, now, conversationID); err != nil {
+			return rollback(err)
+		}
+	} else if _, err := tx.Exec(`UPDATE conversations SET updated_at = ? WHERE id = ?`,
+		now, conversationID); err != nil {
+		return rollback(err)
+	}
+
+	res, err := tx.Exec(`
+UPDATE messages SET content = ?, status = ?, error = ?, input_tokens = ?,
+    output_tokens = ?, duration_ms = ?
+WHERE id = ? AND conversation_id = ? AND role = 'assistant' AND status = 'running'`,
+		content, status, errText, inTok, outTok, durationMs, messageID, conversationID)
+	if err != nil {
+		return rollback(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return rollback(fmt.Errorf("%w: assistant turn is no longer running", ErrConflict))
+	}
+	return tx.Commit()
 }
 
 // ListRecentMessages returns the newest messages across all conversations,
