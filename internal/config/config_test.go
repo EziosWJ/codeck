@@ -48,7 +48,7 @@ func TestExplicitPathBeatsDerivedPath(t *testing.T) {
 }
 
 func TestDefaultsWhenNothingIsSet(t *testing.T) {
-	for _, key := range []string{"DATA_DIR", "DB_PATH", "ADDR", "AUTH_USER", "AUTH_PASSWORD", "CODEX_BIN", "SCHEDULER_INTERVAL"} {
+	for _, key := range []string{"DATA_DIR", "DB_PATH", "ADDR", "AUTH_USER", "AUTH_PASSWORD", "CODEX_BIN", "SCHEDULER_INTERVAL", "ACCOUNT_CACHE_TTL"} {
 		os.Unsetenv(EnvPrefix + key)
 	}
 	t.Chdir(t.TempDir())
@@ -62,6 +62,9 @@ func TestDefaultsWhenNothingIsSet(t *testing.T) {
 	}
 	if cfg.SchedulerInterval != 10*time.Second {
 		t.Errorf("SchedulerInterval = %s, want 10s", cfg.SchedulerInterval)
+	}
+	if cfg.AccountCacheTTL != 30*time.Second {
+		t.Errorf("AccountCacheTTL = %s, want 30s", cfg.AccountCacheTTL)
 	}
 	if cfg.DefaultTimeout != 5*time.Minute {
 		t.Errorf("DefaultTimeout = %s, want 5m", cfg.DefaultTimeout)
@@ -180,6 +183,37 @@ func TestInvalidValuesAreRejected(t *testing.T) {
 	t.Setenv(EnvPrefix+"MAX_CONCURRENT_RUNS", "0")
 	if _, err := Load(""); err == nil {
 		t.Error("MAX_CONCURRENT_RUNS=0 should be rejected")
+	}
+}
+
+func TestAccountCacheTTLIsConfigurable(t *testing.T) {
+	t.Setenv(EnvPrefix+"ACCOUNT_CACHE_TTL", "45s")
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.AccountCacheTTL != 45*time.Second {
+		t.Errorf("AccountCacheTTL = %s, want 45s", cfg.AccountCacheTTL)
+	}
+
+	// ACCOUNT_INTERVAL is the friendlier alias for the same knob.
+	os.Unsetenv(EnvPrefix + "ACCOUNT_CACHE_TTL")
+	t.Setenv(EnvPrefix+"ACCOUNT_INTERVAL", "1m")
+	cfg, err = Load("")
+	if err != nil {
+		t.Fatalf("Load with ACCOUNT_INTERVAL: %v", err)
+	}
+	if cfg.AccountCacheTTL != time.Minute {
+		t.Errorf("AccountCacheTTL = %s, want 1m", cfg.AccountCacheTTL)
+	}
+}
+
+func TestAccountCacheTTLRejectsBadValues(t *testing.T) {
+	for _, value := range []string{"not-a-duration", "0s", "-5s"} {
+		t.Setenv(EnvPrefix+"ACCOUNT_CACHE_TTL", value)
+		if _, err := Load(""); err == nil {
+			t.Errorf("ACCOUNT_CACHE_TTL=%q should be rejected", value)
+		}
 	}
 }
 

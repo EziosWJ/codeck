@@ -79,7 +79,7 @@ func run() error {
 
 	log.Info("starting codeck",
 		"version", version, "addr", cfg.Addr, "data_dir", cfg.DataDir, "db", cfg.DBPath,
-		"scheduler_enabled", cfg.SchedulerEnabled)
+		"scheduler_enabled", cfg.SchedulerEnabled, "account_cache_ttl", cfg.AccountCacheTTL)
 
 	db, err := store.Open(cfg.DBPath)
 	if err != nil {

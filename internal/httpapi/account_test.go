@@ -5,7 +5,24 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
+
+	"codeck/internal/config"
 )
+
+func TestAccountCacheTTLFallsBackWhenUnset(t *testing.T) {
+	// config.Load always populates the field, but tests and internal callers
+	// build Server from a bare literal, so the fallback must stay in place.
+	s := &Server{cfg: config.Config{}}
+	if got := s.accountCacheTTL(); got != defaultAccountCacheTTL {
+		t.Errorf("accountCacheTTL() = %s, want the fallback %s", got, defaultAccountCacheTTL)
+	}
+
+	s = &Server{cfg: config.Config{AccountCacheTTL: 90 * time.Second}}
+	if got := s.accountCacheTTL(); got != 90*time.Second {
+		t.Errorf("accountCacheTTL() = %s, want the configured 90s", got)
+	}
+}
 
 func TestAccountEndpointWithoutAppServer(t *testing.T) {
 	s := &Server{}

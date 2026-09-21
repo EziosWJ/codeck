@@ -43,6 +43,11 @@ type Config struct {
 
 	// SchedulerInterval is how often the scheduler polls for due tasks.
 	SchedulerInterval time.Duration
+	// AccountCacheTTL is how long the account/usage snapshot served by
+	// GET /account is reused before the App Server is queried again. Every open
+	// tab polls /account, and this cache is what collapses that traffic into one
+	// upstream call per window.
+	AccountCacheTTL time.Duration
 	// SchedulerEnabled gates the automatic cron dispatch loop. When false the
 	// server still serves the UI/API (and manual "run now" triggers), but due
 	// tasks are never picked up automatically. Handy for opening a second
@@ -75,6 +80,7 @@ func Default() Config {
 		WorkspaceRoot:     "",
 		AuthSource:        filepath.Join(home, ".codex", "auth.json"),
 		SchedulerInterval: 10 * time.Second,
+		AccountCacheTTL:   30 * time.Second,
 		SchedulerEnabled:  true,
 		DefaultTimeout:    5 * time.Minute,
 		MaxConcurrentRuns: 4,
@@ -251,6 +257,15 @@ func assign(cfg *Config, key, value string) error {
 			return fmt.Errorf("invalid SCHEDULER_INTERVAL %q: %w", value, err)
 		}
 		cfg.SchedulerInterval = d
+	case "ACCOUNT_CACHE_TTL", "ACCOUNT_INTERVAL":
+		d, err := time.ParseDuration(value)
+		if err != nil {
+			return fmt.Errorf("invalid ACCOUNT_CACHE_TTL %q: %w", value, err)
+		}
+		if d <= 0 {
+			return fmt.Errorf("invalid ACCOUNT_CACHE_TTL %q: must be positive", value)
+		}
+		cfg.AccountCacheTTL = d
 	case "SCHEDULER_ENABLED", "ENABLE_SCHEDULER":
 		enabled, err := parseBool(value)
 		if err != nil {

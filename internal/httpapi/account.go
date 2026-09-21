@@ -11,7 +11,19 @@ import (
 	"codeck/internal/codex"
 )
 
-const accountCacheTTL = 15 * time.Second
+// defaultAccountCacheTTL applies when no TTL was configured, i.e. when a Server
+// is built from a bare config.Config literal rather than through config.Load.
+const defaultAccountCacheTTL = 30 * time.Second
+
+// accountCacheTTL reports how long an account snapshot may be reused. The ttl
+// is a config knob because every open web tab polls /account on its own timer;
+// this cache is what turns that traffic into one App Server call per window.
+func (s *Server) accountCacheTTL() time.Duration {
+	if s.cfg.AccountCacheTTL > 0 {
+		return s.cfg.AccountCacheTTL
+	}
+	return defaultAccountCacheTTL
+}
 
 // accountSnapshot is the dashboard payload. Nested objects are the App Server's
 // own JSON, passed through so the UI can show whatever the protocol returns.
@@ -34,7 +46,7 @@ func (s *Server) loadAccount(ctx context.Context) accountSnapshot {
 
 	s.accountMu.Lock()
 	defer s.accountMu.Unlock()
-	if !s.accountCachedAt.IsZero() && time.Since(s.accountCachedAt) < accountCacheTTL {
+	if !s.accountCachedAt.IsZero() && time.Since(s.accountCachedAt) < s.accountCacheTTL() {
 		return s.accountCached
 	}
 
