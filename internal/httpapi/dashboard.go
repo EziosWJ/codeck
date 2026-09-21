@@ -6,18 +6,40 @@ import (
 	"time"
 )
 
+// codexCacheTTL bounds how often the CLI is probed. The web UI polls /health
+// and /dashboard every 10s from every open tab, and an uncached probe spawns a
+// `codex --version` process; this TTL collapses that burst into one spawn. The
+// cost is that a CLI installed after startup is not noticed for up to this long.
+const codexCacheTTL = 30 * time.Second
+
+// codexStatus reports whether the Codex CLI is usable, reusing a recent probe.
+// Every caller goes through here so concurrent requests share one process.
+func (s *Server) codexStatus(ctx context.Context) (bool, string) {
+	s.codexMu.Lock()
+	defer s.codexMu.Unlock()
+	if !s.codexCachedAt.IsZero() && time.Since(s.codexCachedAt) < codexCacheTTL {
+		return s.codexAvailable, s.codexVersion
+	}
+
+	available, version := s.codex.Available(ctx)
+	s.codexAvailable = available
+	s.codexVersion = version
+	s.codexCachedAt = time.Now()
+	return available, version
+}
+
 // handleHealth reports whether the service and the Codex CLI are usable.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 
-	available, version := s.codex.Available(ctx)
+	codexAvailable, codexVersion := s.codexStatus(ctx)
 	schema, _ := s.db.SchemaVersion()
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":                true,
-		"codex_available":   available,
-		"codex_version":     version,
+		"codex_available":   codexAvailable,
+		"codex_version":     codexVersion,
 		"codex_bin":         s.codex.Bin(),
 		"db_path":           s.cfg.DBPath,
 		"version":           s.version,
@@ -71,7 +93,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	available, codexVersion := s.codex.Available(ctx)
+	available, codexVersion := s.codexStatus(ctx)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"counts": map[string]any{

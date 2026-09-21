@@ -44,6 +44,13 @@ type Server struct {
 	accountCached   accountSnapshot
 	accountCachedAt time.Time
 
+	// codexMu guards the shared `codex --version` probe that /health and
+	// /dashboard both report.
+	codexMu        sync.Mutex
+	codexAvailable bool
+	codexVersion   string
+	codexCachedAt  time.Time
+
 	usageMu       sync.Mutex
 	usageCached   usage.Report
 	usageCachedAt time.Time
