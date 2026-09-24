@@ -361,7 +361,7 @@ function PriceForm({
 
   async function submit() {
     if (form.pattern.trim() === '') {
-      setError('pattern 为必填，例如 gpt-5.6-luna 或 gpt-*-sol。')
+      setError('pattern 为必填，例如 gpt-6-luna 或 gpt-*-sol。')
       return
     }
     setSaving(true)
@@ -394,12 +394,12 @@ function PriceForm({
       }
     >
       <ErrorBox error={error} />
-      <Field label="pattern" hint="精确 slug 或 glob。gpt-6-sol 可被 gpt-*-sol 接住。">
+      <Field label="pattern" hint="精确 slug 或 glob。gpt-7-sol 可被 gpt-*-sol 接住。">
         <input
           className="input"
           value={form.pattern}
           onChange={(e) => set('pattern', e.target.value)}
-          placeholder="gpt-5.6-luna"
+          placeholder="gpt-6-luna"
         />
       </Field>
       <div className="grid grid-2">

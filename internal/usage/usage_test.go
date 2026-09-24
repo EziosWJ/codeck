@@ -13,8 +13,8 @@ import (
 
 func TestDefaultPricesLoad(t *testing.T) {
 	prices := DefaultPrices()
-	if len(prices) != 9 {
-		t.Fatalf("seed rows = %d, want 9", len(prices))
+	if len(prices) != 11 {
+		t.Fatalf("seed rows = %d, want 11", len(prices))
 	}
 	if prices[0].Pattern != "gpt-6-astra" || prices[0].InputUSDPerMTok != 10 {
 		t.Fatalf("first seed = %+v", prices[0])
@@ -27,13 +27,47 @@ func TestMatchExactBeatsGlob(t *testing.T) {
 	if !ok || p.Pattern != "gpt-5.6-sol" {
 		t.Fatalf("got %+v ok=%v", p, ok)
 	}
+	// gpt-6-sol is a released slug with its own row, so it must not fall
+	// through to the gpt-*-sol fallback.
 	p, ok = Match("gpt-6-sol", prices)
+	if !ok || p.Pattern != "gpt-6-sol" || p.InputUSDPerMTok != 2 {
+		t.Fatalf("gpt-6-sol = %+v ok=%v", p, ok)
+	}
+	p, ok = Match("gpt-6-luna", prices)
+	if !ok || p.Pattern != "gpt-6-luna" || p.InputUSDPerMTok != 0.1 {
+		t.Fatalf("gpt-6-luna = %+v ok=%v", p, ok)
+	}
+	p, ok = Match("gpt-7-sol", prices)
 	if !ok || p.Pattern != "gpt-*-sol" {
 		t.Fatalf("future sol = %+v ok=%v", p, ok)
 	}
 	p, ok = Match("codex-auto-review", prices)
 	if ok {
 		t.Fatalf("unlisted model matched %s", p.Pattern)
+	}
+}
+
+func TestCostUSDForGPT6Sol(t *testing.T) {
+	p, ok := Match("gpt-6-sol", DefaultPrices())
+	if !ok {
+		t.Fatal("missing gpt-6-sol")
+	}
+	// 2000 uncached * 2 + 1000 cached * 0.2 + 500 cache write * 2.5
+	// + 300 output * 10, per 1M.
+	got := CostUSD(codex.Usage{
+		InputTokens: 3000, CachedInputTokens: 1000, CacheWriteInputTokens: 500,
+		OutputTokens: 300, TotalTokens: 3300,
+	}, p)
+	want := 2000/1e6*2 + 1000/1e6*0.2 + 500/1e6*2.5 + 300/1e6*10
+	if math.Abs(got-want) > 1e-12 {
+		t.Fatalf("cost = %g, want %g", got, want)
+	}
+
+	// Over 272K input tokens the whole request is billed at long rates.
+	got = CostUSD(codex.Usage{InputTokens: 300_000, OutputTokens: 100, TotalTokens: 300_100}, p)
+	want = 300_000/1e6*4 + 100/1e6*15
+	if math.Abs(got-want) > 1e-12 {
+		t.Fatalf("long cost = %g, want %g", got, want)
 	}
 }
 
@@ -144,7 +178,7 @@ func TestSeedThenRestoreDoesNotDuplicate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n != 9 {
+	if n != 11 {
 		t.Fatalf("count after double seed = %d", n)
 	}
 	extra, err := db.CreateModelPrice(store.ModelPrice{
@@ -157,8 +191,8 @@ func TestSeedThenRestoreDoesNotDuplicate(t *testing.T) {
 		t.Fatal(err)
 	}
 	n, _ = db.CountModelPrices()
-	if n != 10 {
-		t.Fatalf("count after restore = %d, want 10 (kept extra)", n)
+	if n != 12 {
+		t.Fatalf("count after restore = %d, want 12 (kept extra)", n)
 	}
 	if _, err := db.GetModelPrice(extra.ID); err != nil {
 		t.Fatalf("extra row lost: %v", err)

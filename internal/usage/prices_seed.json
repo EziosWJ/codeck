@@ -14,6 +14,34 @@
     "notes": "OpenAI Standard, 2026-09-17"
   },
   {
+    "pattern": "gpt-6-sol",
+    "input_usd_per_mtok": 2,
+    "cached_input_usd_per_mtok": 0.2,
+    "cache_write_usd_per_mtok": 2.5,
+    "output_usd_per_mtok": 10,
+    "long_input_usd_per_mtok": 4,
+    "long_cached_input_usd_per_mtok": 0.4,
+    "long_cache_write_usd_per_mtok": 5,
+    "long_output_usd_per_mtok": 15,
+    "long_threshold_tokens": 272000,
+    "priority": 100,
+    "notes": "OpenAI Standard, 2026-09-22"
+  },
+  {
+    "pattern": "gpt-6-luna",
+    "input_usd_per_mtok": 0.1,
+    "cached_input_usd_per_mtok": 0.01,
+    "cache_write_usd_per_mtok": 0.125,
+    "output_usd_per_mtok": 0.5,
+    "long_input_usd_per_mtok": 0.2,
+    "long_cached_input_usd_per_mtok": 0.02,
+    "long_cache_write_usd_per_mtok": 0.25,
+    "long_output_usd_per_mtok": 0.75,
+    "long_threshold_tokens": 272000,
+    "priority": 100,
+    "notes": "OpenAI Standard, 2026-09-22"
+  },
+  {
     "pattern": "gpt-5.6-sol",
     "input_usd_per_mtok": 4,
     "cached_input_usd_per_mtok": 0.4,
@@ -25,7 +53,7 @@
     "long_output_usd_per_mtok": 30,
     "long_threshold_tokens": 272000,
     "priority": 100,
-    "notes": "OpenAI Standard, 2026-09-17"
+    "notes": "OpenAI Standard, 2026-09-17; promotional, available at least through 2026-11-21"
   },
   {
     "pattern": "gpt-5.6-terra",

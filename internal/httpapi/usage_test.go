@@ -67,7 +67,7 @@ func TestUsageEndpointPricesLocalSessions(t *testing.T) {
 	for _, row := range got.ByModel {
 		if row.Model == "gpt-6-sol" {
 			foundSol = true
-			if !row.Wildcard || row.MatchedBy != "gpt-*-sol" {
+			if row.Wildcard || row.MatchedBy != "gpt-6-sol" {
 				t.Fatalf("gpt-6-sol match = %+v", row)
 			}
 		}
@@ -109,7 +109,7 @@ func TestPriceCRUDAndRestore(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if len(listed) != 9 {
+	if len(listed) != 11 {
 		t.Fatalf("seeded %d rows", len(listed))
 	}
 
@@ -132,8 +132,8 @@ func TestPriceCRUDAndRestore(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if len(listed) != 10 {
-		t.Fatalf("after restore %d rows, want 10 (kept custom)", len(listed))
+	if len(listed) != 12 {
+		t.Fatalf("after restore %d rows, want 12 (kept custom)", len(listed))
 	}
 
 	w = httptest.NewRecorder()

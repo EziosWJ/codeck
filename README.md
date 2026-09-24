@@ -12,7 +12,7 @@ Codeck 是跑在本机的 Codex 控制台：把 Codex CLI 包一层 Web UI，让
 
 ## 功能
 
-六个页面，侧栏切换。下面每张图都是跑着的本机实例。
+七个页面，侧栏切换。下面每张图都是跑着的本机实例。
 
 ### 总览
 
@@ -43,6 +43,14 @@ prompt + Profile + 计划。循环任务按 cron 重复跑；一次性任务在�
 扫描各 Profile 与 `~/.codex` 的 session jsonl，按模型汇总 token，用 `model_prices` 换成 Standard API 美元。不是 ChatGPT credits。可改单价或恢复种子价；未匹配模型只计 token。
 
 ![用量：按模型汇总 token 与等价成本](docs/screenshots/usage.png)
+
+### 重置时间线
+
+每个额度窗口一行，**每行一根独立标尺**：跨度 = 该窗口自身时长 × 倍率（×1 / ×2 / ×4），左端为当前时刻。条从现在画到该窗口重置时刻，深色段是已用比例，剩余部分为可用额度。5 小时行与 7 天行因此各有自己的刻度，不互相挤压。
+
+倍率 >1 时标尺跨进后续窗口，超出当前窗口的部分是按窗口时长推算的重置周期（虚线为预计，最多 12 个）。刻度锚在本地时间边界：小时级步长对齐整点，日级步长对齐本地零点。
+
+数据来自同一个 `GET /api/account`，不新增接口、不新增依赖，也没有历史采样——这根轴只向后看。`resetsAt` 拿不到的窗口保留行并画虚线，避免布局抖动。
 
 ### 历史
 
@@ -87,6 +95,7 @@ data/                   db、每 Profile 的 CODEX_HOME 与 workspace
 | Task | prompt + Profile + 计划（循环：cron 五字段或 `@daily` / `@every 1h`；一次性：`run_at` 精确到秒）+ 超时。`next_run_at` 写库。 |
 | TaskRun | 一次执行：`schedule` / `once` / `manual`，输出、错误、token、耗时。 |
 | 本地用量 | 扫描各 Profile 与 `~/.codex` 的 session jsonl，按模型汇总 token，用 `model_prices` 表换成 Standard API 美元。 |
+| 额度窗口 | `GET /api/account` 里的 `primary` / `secondary`（短窗口 / 长窗口，由 `windowDurationMins` 推断，通常 5 小时与 7 天）。`resetsAt` 是 Unix 秒。重置时间线只读展示，不落库。 |
 
 磁盘：`data/codeck.db`、`data/codex-home/<profile>/`、`data/workspace/<profile>/`。Profile 可覆盖 `work_dir`。scratch workspace 默认空，避免吃到仓库 `AGENTS.md`。
 

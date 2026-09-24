@@ -371,6 +371,110 @@ func TestModelPriceCRUD(t *testing.T) {
 	}
 }
 
+// priceByPattern looks a row up the way the usage report does: by pattern.
+func priceByPattern(t *testing.T, db *DB, pattern string) (ModelPrice, error) {
+	t.Helper()
+	prices, err := db.ListModelPrices()
+	if err != nil {
+		t.Fatalf("ListModelPrices: %v", err)
+	}
+	for _, p := range prices {
+		if p.Pattern == pattern {
+			return p, nil
+		}
+	}
+	return ModelPrice{}, ErrNotFound
+}
+
+// TestGPT6PriceMigrationBackfillsExistingTable simulates an upgrade: a table
+// that already holds rows from an earlier release must gain the GPT-6 Sol/Luna
+// rows, because usage.EnsureSeed only seeds an empty table.
+func TestGPT6PriceMigrationBackfillsExistingTable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	db, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	// Stand in for the pre-upgrade table: one row, as an earlier version left it.
+	for _, pattern := range []string{"gpt-6-sol", "gpt-6-luna", "gpt-5.5"} {
+		if _, err := db.sql.Exec(
+			`DELETE FROM model_prices WHERE pattern = ?`, pattern); err != nil {
+			t.Fatalf("clear %s: %v", pattern, err)
+		}
+	}
+	if _, err := db.CreateModelPrice(ModelPrice{
+		Pattern: "gpt-5.5", InputUSDPerMTok: 5, OutputUSDPerMTok: 30,
+	}); err != nil {
+		t.Fatalf("seed pre-upgrade row: %v", err)
+	}
+	if _, err := db.sql.Exec(
+		`DELETE FROM schema_migrations WHERE version = ?`, len(migrations)); err != nil {
+		t.Fatalf("rewind schema version: %v", err)
+	}
+	db.Close()
+
+	db2, err := Open(path)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer db2.Close()
+
+	sol, err := priceByPattern(t, db2, "gpt-6-sol")
+	if err != nil {
+		t.Fatalf("gpt-6-sol missing after upgrade: %v", err)
+	}
+	if sol.InputUSDPerMTok != 2 || sol.OutputUSDPerMTok != 10 || sol.Priority != DefaultPricePriority {
+		t.Fatalf("gpt-6-sol = %+v", sol)
+	}
+	if sol.LongInputUSDPerMTok == nil || *sol.LongInputUSDPerMTok != 4 {
+		t.Fatalf("gpt-6-sol long rates = %+v", sol)
+	}
+	luna, err := priceByPattern(t, db2, "gpt-6-luna")
+	if err != nil {
+		t.Fatalf("gpt-6-luna missing after upgrade: %v", err)
+	}
+	if luna.InputUSDPerMTok != 0.1 || luna.CacheWriteUSDPerMTok != 0.125 || luna.OutputUSDPerMTok != 0.5 {
+		t.Fatalf("gpt-6-luna = %+v", luna)
+	}
+	if n, err := db2.CountModelPrices(); err != nil || n != 3 {
+		t.Fatalf("count = %d, %v; want 3", n, err)
+	}
+}
+
+// TestGPT6PriceMigrationKeepsOperatorRow proves the backfill never overwrites
+// a price the operator already set for these patterns.
+func TestGPT6PriceMigrationKeepsOperatorRow(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	db, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	custom, err := db.CreateModelPrice(ModelPrice{
+		Pattern: "gpt-6-sol", InputUSDPerMTok: 99, OutputUSDPerMTok: 999, Notes: "operator",
+	})
+	if err != nil {
+		t.Fatalf("create operator row: %v", err)
+	}
+	if _, err := db.sql.Exec(
+		`DELETE FROM schema_migrations WHERE version = ?`, len(migrations)); err != nil {
+		t.Fatalf("rewind schema version: %v", err)
+	}
+	db.Close()
+
+	db2, err := Open(path)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer db2.Close()
+	got, err := db2.GetModelPrice(custom.ID)
+	if err != nil {
+		t.Fatalf("operator row lost: %v", err)
+	}
+	if got.InputUSDPerMTok != 99 || got.Notes != "operator" {
+		t.Fatalf("operator row overwritten: %+v", got)
+	}
+}
+
 func TestConversationAllowsOnlyOneActiveTurn(t *testing.T) {
 	db := newTestDB(t)
 	p, err := db.CreateProfile(Profile{Name: "turn-profile", SandboxMode: "read-only"})

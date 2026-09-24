@@ -1116,6 +1116,172 @@ a:hover {
   margin-top: 5px;
 }
 
+/* -------------------------------------------------- 重置时间线 (/timeline) */
+
+.timeline {
+  padding: 16px;
+}
+.timeline-head {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.timeline-axis-title {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.timeline-axis-note {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-top: 2px;
+}
+.timeline-axis {
+  position: relative;
+  height: 26px;
+}
+.timeline-tick {
+  position: absolute;
+  bottom: 0;
+  top: 0;
+  border-left: 1px solid var(--border);
+}
+.timeline-tick.minor {
+  border-left-color: var(--surface-3);
+}
+.timeline-tick-label {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-rows {
+  display: grid;
+}
+.timeline-row {
+  padding: 16px 0 4px;
+  border-bottom: 1px solid var(--border);
+}
+.timeline-row:last-child {
+  border-bottom: none;
+}
+.timeline-row-label {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.timeline-row-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+.timeline-row-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+.timeline-row-pct {
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  /* 可用额度：绿色系 */
+  color: var(--ok);
+}
+.timeline-row-pct.warn {
+  color: var(--warn);
+}
+.timeline-row-pct.hot {
+  color: var(--err);
+}
+.timeline-row-sub {
+  font-size: 12px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.timeline-row-scale {
+  margin-top: 2px;
+}
+
+.timeline-track {
+  position: relative;
+  height: 26px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.timeline-seg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  /* 可用额度：绿色系 */
+  background: var(--ok);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+/* 剩余比例告警：剩余 ≤30% 转黄、≤10% 转红（阈值与 Quota.tsx 一致） */
+.timeline-seg.warn {
+  background: var(--warn);
+}
+.timeline-seg.hot {
+  background: var(--err);
+}
+.timeline-used {
+  height: 100%;
+  /* 已用：黑灰色系 */
+  background: var(--surface-3);
+  border-right: 1px solid var(--border-strong);
+}
+.timeline-seg.forecast {
+  background: transparent;
+  border: 1px dashed var(--border-strong);
+  opacity: 0.55;
+}
+.timeline-bar.unknown {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+.timeline-clip {
+  position: absolute;
+  right: 2px;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.7;
+}
+.timeline-now {
+  position: absolute;
+  left: 0;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--text);
+  opacity: 0.45;
+  border-radius: 2px;
+}
+.timeline-foot {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.timeline-multipliers {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 820px) {
   .app {
     flex-direction: column;
@@ -1144,6 +1310,13 @@ a:hover {
   .quota-windows,
   .quota-burn {
     grid-template-columns: 1fr;
+  }
+  .timeline-axis {
+    height: 22px;
+  }
+  .timeline-tick-label {
+    font-size: 10px;
+    left: 2px;
   }
   .chat {
     flex-direction: column;

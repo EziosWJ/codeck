@@ -177,7 +177,40 @@ WHERE role = 'assistant' AND status = 'running';
 ALTER TABLE tasks ADD COLUMN deleted_at TEXT;
 CREATE INDEX idx_tasks_active_schedule ON tasks(deleted_at, enabled, next_run_at);
 `,
+	// 11: add the GPT-6 Sol/Luna rows released 2026-09-22. EnsureSeed only
+	// fills an empty table, so without this an upgraded install keeps matching
+	// gpt-6-sol against the gpt-*-sol fallback at the older 5.6 rates. The
+	// migration is a no-op on a fresh database (empty table), where EnsureSeed
+	// seeds every row from prices_seed.json instead; see gpt6PriceMigration.
+	gpt6PriceMigration,
 }
+
+// gpt6PriceMigration inserts the GPT-6 Sol/Luna price rows, but only into a
+// table that already holds prices: a fresh database is seeded in full by
+// usage.EnsureSeed, which bails out as soon as the table is non-empty. INSERT
+// OR IGNORE keeps any row the operator already created for these patterns, so
+// an upgrade never overwrites an edited price.
+const gpt6PriceMigration = `
+INSERT OR IGNORE INTO model_prices (pattern, input_usd_per_mtok, cached_input_usd_per_mtok,
+    cache_write_usd_per_mtok, output_usd_per_mtok, long_input_usd_per_mtok,
+    long_cached_input_usd_per_mtok, long_cache_write_usd_per_mtok,
+    long_output_usd_per_mtok, long_threshold_tokens, priority, notes,
+    created_at, updated_at)
+SELECT 'gpt-6-sol', 2, 0.2, 2.5, 10, 4, 0.4, 5, 15, 272000, 100,
+    'OpenAI Standard, 2026-09-22', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+    strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+WHERE (SELECT COUNT(*) FROM model_prices) > 0;
+
+INSERT OR IGNORE INTO model_prices (pattern, input_usd_per_mtok, cached_input_usd_per_mtok,
+    cache_write_usd_per_mtok, output_usd_per_mtok, long_input_usd_per_mtok,
+    long_cached_input_usd_per_mtok, long_cache_write_usd_per_mtok,
+    long_output_usd_per_mtok, long_threshold_tokens, priority, notes,
+    created_at, updated_at)
+SELECT 'gpt-6-luna', 0.1, 0.01, 0.125, 0.5, 0.2, 0.02, 0.25, 0.75, 272000, 100,
+    'OpenAI Standard, 2026-09-22', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+    strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+WHERE (SELECT COUNT(*) FROM model_prices) > 0;
+`
 
 func (d *DB) migrate() error {
 	if _, err := d.sql.Exec(`
