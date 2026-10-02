@@ -204,13 +204,26 @@ func applyFile(cfg *Config, path string) error {
 		if !ok {
 			return fmt.Errorf("%s:%d: expected KEY=VALUE", path, line)
 		}
-		key = strings.TrimSpace(key)
+		key = trimOptionalPrefix(strings.TrimSpace(key))
 		value = strings.Trim(strings.TrimSpace(value), `"'`)
 		if err := assign(cfg, key, value); err != nil {
 			return fmt.Errorf("%s:%d: %w", path, line, err)
 		}
 	}
 	return scanner.Err()
+}
+
+// trimOptionalPrefix drops a leading CODECK_ so a config file may spell keys
+// either way, as README documents. The match is case-insensitive: `assign` is
+// already case-insensitive, and a lowercase `codeck_addr` that silently fell
+// through to the unknown-key branch would be far harder to notice than one that
+// works. Environment variables are matched separately in applyEnv, which still
+// requires the uppercase prefix so unrelated shell variables are never picked up.
+func trimOptionalPrefix(key string) string {
+	if len(key) >= len(EnvPrefix) && strings.EqualFold(key[:len(EnvPrefix)], EnvPrefix) {
+		return key[len(EnvPrefix):]
+	}
+	return key
 }
 
 func applyEnv(cfg *Config) error {

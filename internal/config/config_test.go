@@ -116,6 +116,80 @@ DATA_DIR=` + dir + `
 	}
 }
 
+// The CODECK_ prefix is optional in a config file (README "配置": keys may be
+// written with or without the prefix). Silently ignoring a prefixed key is what
+// let CODECK_SCHEDULER_ENABLED=false be discarded while the scheduler stayed on.
+func TestConfigFileAcceptsOptionalEnvPrefix(t *testing.T) {
+	dir := t.TempDir()
+	for _, key := range []string{"ADDR", "SCHEDULER_ENABLED", "LOG_LEVEL"} {
+		os.Unsetenv(EnvPrefix + key)
+	}
+
+	cases := []struct {
+		name    string
+		content string
+	}{
+		{"without prefix", "ADDR=127.0.0.1:9999\nSCHEDULER_ENABLED=false\nLOG_LEVEL=warn\n"},
+		{"with prefix", "CODECK_ADDR=127.0.0.1:9999\nCODECK_SCHEDULER_ENABLED=false\nCODECK_LOG_LEVEL=warn\n"},
+		{"lowercase prefix", "codeck_addr=127.0.0.1:9999\ncodeck_scheduler_enabled=false\ncodeck_log_level=warn\n"},
+		{"mixed within one file", "ADDR=127.0.0.1:9999\nCODECK_SCHEDULER_ENABLED=false\nLOG_LEVEL=warn\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(dir, "codeck.env")
+			if err := os.WriteFile(path, []byte(tc.content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := Load(path)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if cfg.Addr != "127.0.0.1:9999" {
+				t.Errorf("Addr = %q, want 127.0.0.1:9999", cfg.Addr)
+			}
+			if cfg.SchedulerEnabled {
+				t.Error("SchedulerEnabled = true, want false; a discarded key here starts real scheduled runs")
+			}
+			if cfg.LogLevel != "warn" {
+				t.Errorf("LogLevel = %q, want warn", cfg.LogLevel)
+			}
+		})
+	}
+}
+
+// Keys are matched case-insensitively, both with and without the prefix.
+func TestConfigFileKeyCaseInsensitive(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "codeck.env")
+	if err := os.WriteFile(path, []byte("codeck_Data_Dir="+dir+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	os.Unsetenv(EnvPrefix + "DATA_DIR")
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.DataDir != dir {
+		t.Errorf("DataDir = %q, want %q", cfg.DataDir, dir)
+	}
+}
+
+// The environment still requires the prefix: applyEnv must not start consuming
+// unrelated lowercase variables such as a shell's own `addr`.
+func TestEnvironmentStillRequiresPrefix(t *testing.T) {
+	t.Setenv("ADDR", "127.0.0.1:12345")
+	os.Unsetenv(EnvPrefix + "ADDR")
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Addr == "127.0.0.1:12345" {
+		t.Error("bare ADDR leaked in from the environment; applyEnv must require CODECK_")
+	}
+}
+
 func TestSchedulerEnabledDefaultsToTrue(t *testing.T) {
 	os.Unsetenv(EnvPrefix + "SCHEDULER_ENABLED")
 	os.Unsetenv(EnvPrefix + "ENABLE_SCHEDULER")
