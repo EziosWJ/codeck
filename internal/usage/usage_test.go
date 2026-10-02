@@ -13,8 +13,8 @@ import (
 
 func TestDefaultPricesLoad(t *testing.T) {
 	prices := DefaultPrices()
-	if len(prices) != 11 {
-		t.Fatalf("seed rows = %d, want 11", len(prices))
+	if len(prices) != 12 {
+		t.Fatalf("seed rows = %d, want 12", len(prices))
 	}
 	if prices[0].Pattern != "gpt-6-astra" || prices[0].InputUSDPerMTok != 10 {
 		t.Fatalf("first seed = %+v", prices[0])
@@ -36,6 +36,12 @@ func TestMatchExactBeatsGlob(t *testing.T) {
 	p, ok = Match("gpt-6-luna", prices)
 	if !ok || p.Pattern != "gpt-6-luna" || p.InputUSDPerMTok != 0.1 {
 		t.Fatalf("gpt-6-luna = %+v ok=%v", p, ok)
+	}
+	// gpt-6.1-sol must beat the gpt-*-sol glob: same input as gpt-6-sol but a
+	// 5% cached rate, so a glob match would overcharge cached tokens 2x.
+	p, ok = Match("gpt-6.1-sol", prices)
+	if !ok || p.Pattern != "gpt-6.1-sol" || p.CachedInputUSDPerMTok != 0.1 {
+		t.Fatalf("gpt-6.1-sol = %+v ok=%v", p, ok)
 	}
 	p, ok = Match("gpt-7-sol", prices)
 	if !ok || p.Pattern != "gpt-*-sol" {
@@ -178,7 +184,7 @@ func TestSeedThenRestoreDoesNotDuplicate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n != 11 {
+	if n != 12 {
 		t.Fatalf("count after double seed = %d", n)
 	}
 	extra, err := db.CreateModelPrice(store.ModelPrice{
@@ -191,8 +197,8 @@ func TestSeedThenRestoreDoesNotDuplicate(t *testing.T) {
 		t.Fatal(err)
 	}
 	n, _ = db.CountModelPrices()
-	if n != 12 {
-		t.Fatalf("count after restore = %d, want 12 (kept extra)", n)
+	if n != 13 {
+		t.Fatalf("count after restore = %d, want 13 (kept extra)", n)
 	}
 	if _, err := db.GetModelPrice(extra.ID); err != nil {
 		t.Fatalf("extra row lost: %v", err)

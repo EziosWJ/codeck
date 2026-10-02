@@ -109,7 +109,7 @@ func TestPriceCRUDAndRestore(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if len(listed) != 11 {
+	if len(listed) != 12 {
 		t.Fatalf("seeded %d rows", len(listed))
 	}
 
@@ -132,8 +132,8 @@ func TestPriceCRUDAndRestore(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if len(listed) != 12 {
-		t.Fatalf("after restore %d rows, want 12 (kept custom)", len(listed))
+	if len(listed) != 13 {
+		t.Fatalf("after restore %d rows, want 13 (kept custom)", len(listed))
 	}
 
 	w = httptest.NewRecorder()

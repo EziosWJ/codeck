@@ -396,7 +396,7 @@ func TestGPT6PriceMigrationBackfillsExistingTable(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	// Stand in for the pre-upgrade table: one row, as an earlier version left it.
-	for _, pattern := range []string{"gpt-6-sol", "gpt-6-luna", "gpt-5.5"} {
+	for _, pattern := range []string{"gpt-6-sol", "gpt-6-luna", "gpt-6.1-sol", "gpt-5.5"} {
 		if _, err := db.sql.Exec(
 			`DELETE FROM model_prices WHERE pattern = ?`, pattern); err != nil {
 			t.Fatalf("clear %s: %v", pattern, err)
@@ -408,7 +408,7 @@ func TestGPT6PriceMigrationBackfillsExistingTable(t *testing.T) {
 		t.Fatalf("seed pre-upgrade row: %v", err)
 	}
 	if _, err := db.sql.Exec(
-		`DELETE FROM schema_migrations WHERE version = ?`, len(migrations)); err != nil {
+		`DELETE FROM schema_migrations WHERE version >= ?`, priceSeedMigrationGPT6); err != nil {
 		t.Fatalf("rewind schema version: %v", err)
 	}
 	db.Close()
@@ -436,8 +436,56 @@ func TestGPT6PriceMigrationBackfillsExistingTable(t *testing.T) {
 	if luna.InputUSDPerMTok != 0.1 || luna.CacheWriteUSDPerMTok != 0.125 || luna.OutputUSDPerMTok != 0.5 {
 		t.Fatalf("gpt-6-luna = %+v", luna)
 	}
-	if n, err := db2.CountModelPrices(); err != nil || n != 3 {
-		t.Fatalf("count = %d, %v; want 3", n, err)
+	if n, err := db2.CountModelPrices(); err != nil || n != 4 {
+		t.Fatalf("count = %d, %v; want 4", n, err)
+	}
+}
+
+// TestGPT61SolPriceMigrationBackfills covers the gpt-6.1-sol upgrade. Without
+// its own row the slug falls through to the gpt-*-sol glob, which prices it at
+// 5.6 Sol's $4/$20 instead of $2/$10.
+func TestGPT61SolPriceMigrationBackfills(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	db, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if _, err := db.sql.Exec(
+		`DELETE FROM model_prices WHERE pattern = ?`, "gpt-6.1-sol"); err != nil {
+		t.Fatalf("clear gpt-6.1-sol: %v", err)
+	}
+	if _, err := db.CreateModelPrice(ModelPrice{
+		Pattern: "gpt-5.5", InputUSDPerMTok: 5, OutputUSDPerMTok: 30,
+	}); err != nil {
+		t.Fatalf("seed pre-upgrade row: %v", err)
+	}
+	if _, err := db.sql.Exec(
+		`DELETE FROM schema_migrations WHERE version >= ?`, priceSeedMigrationGPT61); err != nil {
+		t.Fatalf("rewind schema version: %v", err)
+	}
+	db.Close()
+
+	db2, err := Open(path)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer db2.Close()
+
+	got, err := priceByPattern(t, db2, "gpt-6.1-sol")
+	if err != nil {
+		t.Fatalf("gpt-6.1-sol missing after upgrade: %v", err)
+	}
+	if got.InputUSDPerMTok != 2 || got.CachedInputUSDPerMTok != 0.1 ||
+		got.CacheWriteUSDPerMTok != 2.5 || got.OutputUSDPerMTok != 10 {
+		t.Fatalf("gpt-6.1-sol = %+v", got)
+	}
+	if got.LongInputUSDPerMTok == nil || *got.LongInputUSDPerMTok != 4 ||
+		got.LongCachedInputUSDPerMTok == nil || *got.LongCachedInputUSDPerMTok != 0.2 ||
+		got.LongOutputUSDPerMTok == nil || *got.LongOutputUSDPerMTok != 15 {
+		t.Fatalf("gpt-6.1-sol long rates = %+v", got)
+	}
+	if got.Priority != DefaultPricePriority {
+		t.Fatalf("gpt-6.1-sol priority = %d, want %d", got.Priority, DefaultPricePriority)
 	}
 }
 
@@ -455,8 +503,14 @@ func TestGPT6PriceMigrationKeepsOperatorRow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create operator row: %v", err)
 	}
+	renamed, err := db.CreateModelPrice(ModelPrice{
+		Pattern: "gpt-6.1-sol", InputUSDPerMTok: 77, OutputUSDPerMTok: 777, Notes: "operator",
+	})
+	if err != nil {
+		t.Fatalf("create operator gpt-6.1 row: %v", err)
+	}
 	if _, err := db.sql.Exec(
-		`DELETE FROM schema_migrations WHERE version = ?`, len(migrations)); err != nil {
+		`DELETE FROM schema_migrations WHERE version >= ?`, priceSeedMigrationGPT6); err != nil {
 		t.Fatalf("rewind schema version: %v", err)
 	}
 	db.Close()
@@ -466,12 +520,18 @@ func TestGPT6PriceMigrationKeepsOperatorRow(t *testing.T) {
 		t.Fatalf("reopen: %v", err)
 	}
 	defer db2.Close()
-	got, err := db2.GetModelPrice(custom.ID)
-	if err != nil {
-		t.Fatalf("operator row lost: %v", err)
-	}
-	if got.InputUSDPerMTok != 99 || got.Notes != "operator" {
-		t.Fatalf("operator row overwritten: %+v", got)
+	for _, want := range []struct {
+		id   int64
+		in   float64
+		note string
+	}{{custom.ID, 99, "operator"}, {renamed.ID, 77, "operator"}} {
+		got, err := db2.GetModelPrice(want.id)
+		if err != nil {
+			t.Fatalf("operator row %d lost: %v", want.id, err)
+		}
+		if got.InputUSDPerMTok != want.in || got.Notes != want.note {
+			t.Fatalf("operator row overwritten: %+v", got)
+		}
 	}
 }
 

@@ -183,7 +183,18 @@ CREATE INDEX idx_tasks_active_schedule ON tasks(deleted_at, enabled, next_run_at
 	// migration is a no-op on a fresh database (empty table), where EnsureSeed
 	// seeds every row from prices_seed.json instead; see gpt6PriceMigration.
 	gpt6PriceMigration,
+	// 12: same story for gpt-6.1-sol, released 2026-09-29. It is caught by the
+	// gpt-*-sol glob, which would price it at 5.6 Sol's $4/$20 instead of the
+	// real $2/$10.
+	gpt61SolPriceMigration,
 }
+
+// Versions of the price-backfill migrations. Tests rewind schema_migrations to
+// these so reopening the database replays the upgrade path.
+const (
+	priceSeedMigrationGPT6  = 11 // gpt-6-sol, gpt-6-luna (2026-09-22)
+	priceSeedMigrationGPT61 = 12 // gpt-6.1-sol (2026-09-29)
+)
 
 // gpt6PriceMigration inserts the GPT-6 Sol/Luna price rows, but only into a
 // table that already holds prices: a fresh database is seeded in full by
@@ -208,6 +219,20 @@ INSERT OR IGNORE INTO model_prices (pattern, input_usd_per_mtok, cached_input_us
     created_at, updated_at)
 SELECT 'gpt-6-luna', 0.1, 0.01, 0.125, 0.5, 0.2, 0.02, 0.25, 0.75, 272000, 100,
     'OpenAI Standard, 2026-09-22', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+    strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+WHERE (SELECT COUNT(*) FROM model_prices) > 0;
+`
+
+// gpt61SolPriceMigration adds gpt-6.1-sol (2026-09-29). Cached input is 5% of
+// the input rate for this model, not the usual 10%.
+const gpt61SolPriceMigration = `
+INSERT OR IGNORE INTO model_prices (pattern, input_usd_per_mtok, cached_input_usd_per_mtok,
+    cache_write_usd_per_mtok, output_usd_per_mtok, long_input_usd_per_mtok,
+    long_cached_input_usd_per_mtok, long_cache_write_usd_per_mtok,
+    long_output_usd_per_mtok, long_threshold_tokens, priority, notes,
+    created_at, updated_at)
+SELECT 'gpt-6.1-sol', 2, 0.1, 2.5, 10, 4, 0.2, 5, 15, 272000, 100,
+    'OpenAI Standard, 2026-09-29', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
     strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
 WHERE (SELECT COUNT(*) FROM model_prices) > 0;
 `
