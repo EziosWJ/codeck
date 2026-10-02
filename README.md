@@ -112,7 +112,12 @@ data/                   db、每 Profile 的 CODEX_HOME 与 workspace
 
 ## 配置
 
-前缀 `CODECK_`。也可 `-config` 或 `CODECK_CONFIG` 指向 `KEY=VALUE` 文件（可省略前缀）。后源覆盖先源。未知键忽略。
+也可 `-config` 或 `CODECK_CONFIG` 指向 `KEY=VALUE` 文件。后源覆盖先源。未知键忽略。
+
+两种载体的前缀规则不同，别混：
+
+- **环境变量**必须带 `CODECK_` 前缀（`CODECK_ADDR`）。不带前缀的变量不会被读取。
+- **配置文件**里的键前缀可有可无，也可以两种写法混用（`ADDR` 与 `CODECK_ADDR` 等价，前缀不区分大小写）。
 
 `ADDR` `AUTH_USER` `AUTH_PASSWORD` `DATA_DIR` `DB_PATH` `CODEX_BIN` `CODEX_HOME_ROOT` `WORKSPACE_ROOT` `AUTH_SOURCE` `SCHEDULER_INTERVAL` `SCHEDULER_ENABLED` `ACCOUNT_CACHE_TTL` `DEFAULT_TIMEOUT` `MAX_CONCURRENT_RUNS` `LOG_LEVEL`
 

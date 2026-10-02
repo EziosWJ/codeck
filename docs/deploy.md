@@ -186,9 +186,12 @@ systemctl --user stop codeck
 生产（systemd）默认开着调度；开发只看页面时不要抢跑定时任务：
 
 ```bash
-# 二选一：启动参数 --no-scheduler，或环境变量 SCHEDULER_ENABLED=false
-ADDR=127.0.0.1:8080 go run . --no-scheduler
+# 二选一：启动参数 --no-scheduler，或环境变量 CODECK_SCHEDULER_ENABLED=false
+CODECK_ADDR=127.0.0.1:8080 go run . --no-scheduler
 ```
+
+环境变量必须带 `CODECK_` 前缀（`ADDR=... go run .` 会被忽略，进程照常开调度）；
+`-config` 文件里的键则可有可无前缀。
 
 `task dev` 的后端已经默认 `CODECK_SCHEDULER_ENABLED=false`（到期不自动跑，手动「立即执行」仍可用）。
 确认为关可用 `curl --noproxy '*' http://127.0.0.1:8080/api/health` 看 `scheduler_enabled: false`。
