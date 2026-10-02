@@ -1,4 +1,6 @@
+import { useRef } from 'react'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { MobileNav } from './components/MobileNav'
 import Dashboard from './pages/Dashboard'
 import Chat from './pages/Chat'
 import Profiles from './pages/Profiles'
@@ -7,7 +9,9 @@ import History from './pages/History'
 import Usage from './pages/Usage'
 import Timeline from './pages/Timeline'
 
-const NAV = [
+/* 导航项集合与仓库链接地址是单一数据源：桌面侧栏与窄屏抽屉消费同一份定义。 */
+export type NavItem = { to: string; label: string; end: boolean }
+const NAV: NavItem[] = [
   { to: '/', label: '总览', end: true },
   { to: '/chat', label: '对话', end: false },
   { to: '/profiles', label: '档案', end: false },
@@ -19,9 +23,13 @@ const NAV = [
 
 const GITHUB_URL = 'https://github.com/EziosWJ/codeck'
 
+export { NAV, GITHUB_URL }
+
 export default function App() {
+  const mainRef = useRef<HTMLElement>(null)
   return (
     <div className="app">
+      <MobileNav mainRef={mainRef} />
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-name">Codeck</div>
@@ -68,7 +76,7 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="main">
+      <main className="main" ref={mainRef}>
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/chat" element={<Chat />} />

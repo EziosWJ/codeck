@@ -899,7 +899,7 @@ a:hover {
 
 .chat {
   display: flex;
-  height: 100vh;
+  height: 100%;
   overflow: hidden;
 }
 .chat-side {
@@ -1282,26 +1282,175 @@ a:hover {
   flex-wrap: wrap;
 }
 
+/* --------------------------------------------------------- mobile nav */
+
+/* 窄屏导航形态（顶栏 + 抽屉）在桌面宽度下完全不参与布局与焦点。
+   打开/关闭由 `.open` 类切换，`display: none` 同时满足"不可聚焦"与
+   "对辅助技术不可见"两条要求。 */
+.mobile-bar,
+.drawer,
+.drawer-scrim {
+  display: none;
+}
+
+.mobile-bar {
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  /* 顶部刘海/状态栏安全区叠加在基础内边距之上。 */
+  padding-top: calc(6px + env(safe-area-inset-top, 0px));
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
+}
+/* 图标不参与命中测试：`elementFromPoint` 取到的是按钮/链接本身。 */
+.mobile-bar svg {
+  pointer-events: none;
+}
+.mobile-bar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.mobile-bar-btn:hover {
+  background: var(--surface);
+}
+.mobile-bar-title {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mobile-bar-github {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  color: var(--text-dim);
+}
+.mobile-bar-github:hover {
+  color: var(--text);
+}
+.mobile-bar-icon {
+  flex: 0 0 auto;
+}
+
+.drawer-scrim {
+  background: rgba(6, 8, 11, 0.66);
+}
+.drawer {
+  width: min(280px, 82vw);
+  flex-direction: column;
+  gap: 18px;
+  /* 安全区已由顶栏高度承担（抽屉从顶栏下沿开始），此处不再叠加。 */
+  padding: 18px 12px 16px;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+.drawer:focus {
+  outline: none;
+}
+.drawer-brand {
+  padding: 0 10px;
+}
+.drawer-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.drawer-item {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  font-size: 14px;
+  border-left: 2px solid transparent;
+}
+.drawer-item:hover {
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+}
+.drawer-item.active {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+  color: var(--text);
+  font-weight: 500;
+}
+.drawer-foot {
+  margin-top: auto;
+  padding: 0 10px;
+}
+.drawer-github {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+.drawer-github:hover {
+  color: var(--text);
+}
+
 @media (max-width: 820px) {
   .app {
     flex-direction: column;
+    /* 顶栏高度：上下 6px 内边距 + 44px 触控目标 + 1px 下边框。
+       抽屉与遮罩从这条线以下开始，避免盖住汉堡按钮。 */
+    --bar-h: calc(57px + env(safe-area-inset-top, 0px));
   }
+  /* 侧栏导航在窄屏整体消失，由顶栏 + 抽屉替代。 */
   .sidebar {
-    width: 100%;
-    flex: none;
-    height: auto;
-    position: static;
-    flex-direction: row;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 14px;
-    overflow-x: auto;
-  }
-  .sidebar .nav {
-    flex-direction: row;
-  }
-  .sidebar-foot {
     display: none;
+  }
+  /* 顶栏需要一个真正的层叠位置：`position: static` 上的 z-index 无效，
+     抽屉打开时汉堡按钮会被 fixed 的遮罩盖住、点不到。背景不透明，
+     因此压在遮罩之上也不会透出内容。 */
+  .mobile-bar {
+    display: flex;
+    position: relative;
+    z-index: 41;
+  }
+  /* 抽屉与遮罩从顶栏下沿开始。 */
+  .drawer-scrim.open {
+    display: block;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: var(--bar-h);
+    z-index: 40;
+  }
+  .drawer.open {
+    display: flex;
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    top: var(--bar-h);
+    z-index: 40;
+  }
+  /* 打开抽屉期间锁定内容区滚动。规则写在媒体查询内部，跨过 820px 时
+     自动不再匹配——避免在宽屏桌面布局下"抽屉不可见却锁着滚动"。 */
+  .main.nav-locked {
+    overflow: hidden;
   }
   .page {
     padding: 20px 16px 48px;
@@ -1320,7 +1469,9 @@ a:hover {
   }
   .chat {
     flex-direction: column;
-    height: auto;
+  }
+  .chat-main {
+    min-height: 0;
   }
   .chat-side {
     width: 100%;
