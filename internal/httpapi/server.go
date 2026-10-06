@@ -2,6 +2,7 @@
 package httpapi
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
@@ -18,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"codeck/internal/balances"
 	"codeck/internal/codex"
 	"codeck/internal/config"
 	"codeck/internal/scheduler"
@@ -35,6 +37,7 @@ type Server struct {
 	codex     *codex.Service
 	appServer *codex.AppServer
 	sched     *scheduler.Scheduler
+	balances  *balances.Manager
 	log       *slog.Logger
 	version   string
 	static    fs.FS
@@ -64,7 +67,15 @@ func NewServer(cfg config.Config, db *store.DB, svc *codex.Service, sched *sched
 	return &Server{
 		cfg: cfg, db: db, codex: svc, sched: sched, appServer: appServer,
 		log: log, version: version, static: static,
-		started: time.Now(),
+		balances: balances.NewManager(db, cfg.BalanceEncryptionKey, log.With("component", "balances")),
+		started:  time.Now(),
+	}
+}
+
+// Start starts background work owned by the HTTP API, including balance polling.
+func (s *Server) Start(ctx context.Context) {
+	if s.balances != nil {
+		s.balances.Start(ctx)
 	}
 }
 
@@ -75,6 +86,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/health", s.handleHealth)
 	mux.HandleFunc("GET /api/dashboard", s.handleDashboard)
 	mux.HandleFunc("GET /api/account", s.handleAccount)
+	mux.HandleFunc("GET /api/balances", s.handleListBalances)
+	mux.HandleFunc("POST /api/balances", s.handleCreateBalance)
+	mux.HandleFunc("PUT /api/balances/{id}", s.handleUpdateBalance)
+	mux.HandleFunc("DELETE /api/balances/{id}", s.handleDeleteBalance)
+	mux.HandleFunc("POST /api/balances/{id}/refresh", s.handleRefreshBalance)
 
 	mux.HandleFunc("GET /api/profiles", s.handleListProfiles)
 	mux.HandleFunc("POST /api/profiles", s.handleCreateProfile)

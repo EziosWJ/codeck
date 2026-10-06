@@ -399,6 +399,38 @@ export interface UsageReport {
   daily: UsageDayRow[]
 }
 
+export interface BalanceAmount {
+  currency: string
+  total: string
+  details?: Record<string, string>
+}
+
+export interface BalanceConfig {
+  id: number
+  provider: 'deepseek' | 'openrouter' | string
+  name: string
+  interval_seconds: number
+  balances: BalanceAmount[]
+  last_success_at?: string
+  last_error?: string
+  credential_configured: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface BalanceList {
+  available: boolean
+  error?: string
+  balances: BalanceConfig[]
+}
+
+export interface BalanceInput {
+  provider: 'deepseek' | 'openrouter'
+  name: string
+  key: string
+  interval_seconds: number
+}
+
 export interface ModelPrice {
   id: number
   pattern: string
@@ -454,6 +486,14 @@ export const getDashboard = () => request<DashboardData>('/dashboard')
 export const getAccount = () => request<AccountData>('/account')
 export const getUsage = (refresh = false) =>
   request<UsageReport>(`/usage${refresh ? '?refresh=1' : ''}`)
+export const listBalances = () => request<BalanceList>('/balances')
+export const createBalance = (input: BalanceInput) => request<BalanceConfig>('/balances', body(input))
+export const updateBalance = (id: number, input: BalanceInput) =>
+  request<BalanceConfig>(`/balances/${id}`, put(input))
+export const deleteBalance = (id: number) =>
+  request<{ ok: boolean }>(`/balances/${id}`, { method: 'DELETE' })
+export const refreshBalance = (id: number) =>
+  request<BalanceConfig>(`/balances/${id}/refresh`, { method: 'POST' })
 export const listPrices = () => request<ModelPrice[]>('/prices')
 export const createPrice = (p: ModelPriceInput) => request<ModelPrice>('/prices', body(p))
 export const updatePrice = (id: number, p: ModelPriceInput) =>

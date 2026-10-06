@@ -8,6 +8,7 @@ import Tasks from './pages/Tasks'
 import History from './pages/History'
 import Usage from './pages/Usage'
 import Timeline from './pages/Timeline'
+import Balances from './pages/Balances'
 
 /* 导航项集合与仓库链接地址是单一数据源：桌面侧栏与窄屏抽屉消费同一份定义。 */
 export type NavItem = { to: string; label: string; end: boolean }
@@ -18,6 +19,7 @@ const NAV: NavItem[] = [
   { to: '/tasks', label: '任务', end: false },
   { to: '/timeline', label: '重置时间线', end: false },
   { to: '/usage', label: '用量', end: false },
+  { to: '/balances', label: '余额', end: false },
   { to: '/history', label: '历史', end: false },
 ]
 
@@ -84,6 +86,7 @@ export default function App() {
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/timeline" element={<Timeline />} />
           <Route path="/usage" element={<Usage />} />
+          <Route path="/balances" element={<Balances />} />
           <Route path="/history" element={<History />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -122,6 +122,9 @@ tasks:
     # `CODECK_SCHEDULER_ENABLED=true go run .` — with a DATA_DIR of its own.
     env:
       CODECK_SCHEDULER_ENABLED: 'false'
+      # Local test password bddq2024, SHA-256-derived and Base64-encoded.
+      # Keep this deterministic for dev data; never reuse it in production.
+      CODECK_BALANCE_ENCRYPTION_KEY: 'ZVoykcvnFN7TmDQkqv4zH5Ka4qddddPtGJClSq4BIHs='
     cmds:
       - go run .
 

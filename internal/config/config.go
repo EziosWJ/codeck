@@ -60,6 +60,9 @@ type Config struct {
 
 	// LogLevel is one of debug, info, warn, error.
 	LogLevel string
+	// BalanceEncryptionKey is a base64-encoded 32-byte key used only to
+	// encrypt provider credentials stored in SQLite. It is never logged.
+	BalanceEncryptionKey string
 }
 
 // Default returns the configuration with every field populated by defaults.
@@ -70,21 +73,22 @@ type Config struct {
 func Default() Config {
 	home, _ := os.UserHomeDir()
 	return Config{
-		Addr:              "127.0.0.1:8080",
-		HTTPAuthUser:      "",
-		HTTPAuthPassword:  "",
-		DataDir:           "./data",
-		DBPath:            "",
-		CodexBin:          "codex",
-		CodexHomeRoot:     "",
-		WorkspaceRoot:     "",
-		AuthSource:        filepath.Join(home, ".codex", "auth.json"),
-		SchedulerInterval: 10 * time.Second,
-		AccountCacheTTL:   30 * time.Second,
-		SchedulerEnabled:  true,
-		DefaultTimeout:    5 * time.Minute,
-		MaxConcurrentRuns: 4,
-		LogLevel:          "info",
+		Addr:                 "127.0.0.1:8080",
+		HTTPAuthUser:         "",
+		HTTPAuthPassword:     "",
+		DataDir:              "./data",
+		DBPath:               "",
+		CodexBin:             "codex",
+		CodexHomeRoot:        "",
+		WorkspaceRoot:        "",
+		AuthSource:           filepath.Join(home, ".codex", "auth.json"),
+		SchedulerInterval:    10 * time.Second,
+		AccountCacheTTL:      30 * time.Second,
+		SchedulerEnabled:     true,
+		DefaultTimeout:       5 * time.Minute,
+		MaxConcurrentRuns:    4,
+		LogLevel:             "info",
+		BalanceEncryptionKey: "",
 	}
 }
 
@@ -206,6 +210,9 @@ func applyFile(cfg *Config, path string) error {
 		}
 		key = trimOptionalPrefix(strings.TrimSpace(key))
 		value = strings.Trim(strings.TrimSpace(value), `"'`)
+		if strings.EqualFold(key, "BALANCE_ENCRYPTION_KEY") {
+			return fmt.Errorf("%s:%d: BALANCE_ENCRYPTION_KEY must be provided through the process environment", path, line)
+		}
 		if err := assign(cfg, key, value); err != nil {
 			return fmt.Errorf("%s:%d: %w", path, line, err)
 		}
@@ -305,6 +312,8 @@ func assign(cfg *Config, key, value string) error {
 		cfg.MaxConcurrentRuns = n
 	case "LOG_LEVEL":
 		cfg.LogLevel = strings.ToLower(value)
+	case "BALANCE_ENCRYPTION_KEY":
+		cfg.BalanceEncryptionKey = strings.TrimSpace(value)
 	default:
 		// Unknown keys are ignored rather than fatal: a stray variable in the
 		// environment must not stop the service from booting.

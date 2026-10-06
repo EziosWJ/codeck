@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -48,7 +49,7 @@ func TestExplicitPathBeatsDerivedPath(t *testing.T) {
 }
 
 func TestDefaultsWhenNothingIsSet(t *testing.T) {
-	for _, key := range []string{"DATA_DIR", "DB_PATH", "ADDR", "AUTH_USER", "AUTH_PASSWORD", "CODEX_BIN", "SCHEDULER_INTERVAL", "ACCOUNT_CACHE_TTL"} {
+	for _, key := range []string{"DATA_DIR", "DB_PATH", "ADDR", "AUTH_USER", "AUTH_PASSWORD", "CODEX_BIN", "SCHEDULER_INTERVAL", "ACCOUNT_CACHE_TTL", "BALANCE_ENCRYPTION_KEY"} {
 		os.Unsetenv(EnvPrefix + key)
 	}
 	t.Chdir(t.TempDir())
@@ -76,6 +77,26 @@ func TestDefaultsWhenNothingIsSet(t *testing.T) {
 	wantDB, _ := filepath.Abs(filepath.Join("data", "codeck.db"))
 	if cfg.DBPath != wantDB {
 		t.Errorf("DBPath = %q, want %q", cfg.DBPath, wantDB)
+	}
+}
+
+func TestBalanceEncryptionKeyComesOnlyFromEnvironment(t *testing.T) {
+	const encoded = "dGVzdC1rZXk="
+	t.Setenv(EnvPrefix+"BALANCE_ENCRYPTION_KEY", encoded)
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load from environment: %v", err)
+	}
+	if cfg.BalanceEncryptionKey != encoded {
+		t.Fatalf("BalanceEncryptionKey = %q", cfg.BalanceEncryptionKey)
+	}
+
+	path := filepath.Join(t.TempDir(), "codeck.env")
+	if err := os.WriteFile(path, []byte("BALANCE_ENCRYPTION_KEY=must-not-be-here\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "process environment") {
+		t.Fatalf("config-file secret should be rejected, got %v", err)
 	}
 }
 

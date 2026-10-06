@@ -119,7 +119,7 @@ data/                   db、每 Profile 的 CODEX_HOME 与 workspace
 - **环境变量**必须带 `CODECK_` 前缀（`CODECK_ADDR`）。不带前缀的变量不会被读取。
 - **配置文件**里的键前缀可有可无，也可以两种写法混用（`ADDR` 与 `CODECK_ADDR` 等价，前缀不区分大小写）。
 
-`ADDR` `AUTH_USER` `AUTH_PASSWORD` `DATA_DIR` `DB_PATH` `CODEX_BIN` `CODEX_HOME_ROOT` `WORKSPACE_ROOT` `AUTH_SOURCE` `SCHEDULER_INTERVAL` `SCHEDULER_ENABLED` `ACCOUNT_CACHE_TTL` `DEFAULT_TIMEOUT` `MAX_CONCURRENT_RUNS` `LOG_LEVEL`
+`ADDR` `AUTH_USER` `AUTH_PASSWORD` `DATA_DIR` `DB_PATH` `CODEX_BIN` `CODEX_HOME_ROOT` `WORKSPACE_ROOT` `AUTH_SOURCE` `SCHEDULER_INTERVAL` `SCHEDULER_ENABLED` `ACCOUNT_CACHE_TTL` `BALANCE_ENCRYPTION_KEY` `DEFAULT_TIMEOUT` `MAX_CONCURRENT_RUNS` `LOG_LEVEL`
 
 未显式设置时，`DB_PATH` / `CODEX_HOME_ROOT` / `WORKSPACE_ROOT` 都挂在 `DATA_DIR` 下。默认只监听 loopback；如需监听 `0.0.0.0`、`:8080` 或其他非 loopback 地址，必须同时配置 `AUTH_USER` / `AUTH_PASSWORD`。Basic Auth 只编码、不加密凭据，跨机器访问应由 Caddy/Nginx 等提供 HTTPS。
 
@@ -136,10 +136,13 @@ data/                   db、每 Profile 的 CODEX_HOME 与 workspace
 | `AUTH_SOURCE` | `~/.codex/auth.json` | symlink 进各 Profile home 的 auth.json |
 | `SCHEDULER_INTERVAL` | `10s` | 调度轮询间隔 |
 | `ACCOUNT_CACHE_TTL` | `30s` | `GET /account` 快照（账号额度 + rateLimits + usage）的缓存时长。所有打开的前端页面各自按 10s 轮询 `/account`，这个缓存把并发请求收敛成每窗口一次 App Server 调用；调大省上游调用、界面数值更滞后。别名 `ACCOUNT_INTERVAL`，必须为正 |
+| `BALANCE_ENCRYPTION_KEY` | 空 | 余额配置中平台 Key 的加密密钥。必须从 Codeck 进程环境变量注入，值为 Base64 编码的 32 字节随机密钥；缺少或格式错误时仅余额功能不可用。通过 `openssl rand -base64 32` 生成，备份时需要和数据库一起保存。不要放进 `KEY=VALUE` 配置文件 |
 | `SCHEDULER_ENABLED` | `true` | 是否自动跑 cron 到期的任务。开发环境只看页面时设 `false`（或启动加 `--no-scheduler`），到期任务不会被触发，手动「立即执行」仍可用；`GET /api/health` 的 `scheduler_enabled` 会反映此值 |
 | `DEFAULT_TIMEOUT` | `5m` | 单次 Codex 调用默认超时 |
 | `MAX_CONCURRENT_RUNS` | `4` | 最大并发 Codex 进程数 |
 | `LOG_LEVEL` | `info` | 日志级别：`debug` / `info` / `warn` / `error` |
+
+`task dev` 使用固定的本地测试口令 `bddq2024` 派生密钥，以便余额测试数据在开发重启后仍可解密。该密钥只用于 `task dev`，不要用于其他运行方式。
 
 ## API
 

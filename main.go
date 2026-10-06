@@ -154,6 +154,7 @@ func run() error {
 	}
 
 	api := httpapi.NewServer(cfg, db, codexService, sched, appServer, log.With("component", "http"), version, static)
+	api.Start(ctx)
 
 	srv := &http.Server{
 		Addr:    cfg.Addr,

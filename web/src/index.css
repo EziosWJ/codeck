@@ -438,6 +438,74 @@ a:hover {
   margin: 4px 0 18px;
 }
 
+/* --------------------------------------------------------- provider balances */
+
+.balance-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+  gap: 14px;
+}
+.balance-card {
+  margin: 0;
+}
+.balance-card .card-head {
+  align-items: center;
+}
+.balance-provider {
+  margin-top: 3px;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+.balance-body {
+  display: grid;
+  gap: 14px;
+}
+.balance-amounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 28px;
+}
+.balance-amount {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  column-gap: 8px;
+}
+.balance-value {
+  font-size: 25px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.025em;
+}
+.balance-currency {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.balance-details {
+  grid-column: 1 / -1;
+  margin-top: 5px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.balance-details summary {
+  cursor: pointer;
+  color: var(--text-faint);
+}
+.balance-foot {
+  display: grid;
+  gap: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: 12px;
+}
+.balance-error {
+  color: var(--err);
+}
+.balance-unavailable {
+  color: var(--text-faint);
+}
+
 .health {
   display: flex;
   flex-wrap: wrap;
