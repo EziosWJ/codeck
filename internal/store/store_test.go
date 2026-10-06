@@ -140,6 +140,59 @@ func TestProfileCRUDAndValidation(t *testing.T) {
 	}
 }
 
+func TestBalanceConfigCRUDAndKeyReplacementClearsSnapshot(t *testing.T) {
+	db := newTestDB(t)
+	c, err := db.CreateBalanceConfig(BalanceConfig{
+		Provider: "deepseek", Name: "personal", IntervalSeconds: 300,
+		CredentialCiphertext: []byte("ciphertext-v1"),
+	})
+	if err != nil {
+		t.Fatalf("CreateBalanceConfig: %v", err)
+	}
+	if !c.CredentialConfigured || len(c.CredentialCiphertext) == 0 {
+		t.Fatalf("credential was not stored: %+v", c)
+	}
+
+	want := []BalanceAmount{{Currency: "CNY", Total: "42.10", Details: map[string]string{"granted_balance": "2.10"}}}
+	if err := db.SaveBalanceSuccess(c.ID, c.CredentialVersion, want, time.Now()); err != nil {
+		t.Fatalf("SaveBalanceSuccess: %v", err)
+	}
+	updated, err := db.UpdateBalanceConfig(BalanceConfig{
+		ID: c.ID, Provider: c.Provider, Name: "personal", IntervalSeconds: 300,
+		CredentialCiphertext: []byte("ciphertext-v2"),
+	}, true)
+	if err != nil {
+		t.Fatalf("UpdateBalanceConfig with new key: %v", err)
+	}
+	if len(updated.Balances) != 0 || updated.LastSuccessAt != "" || updated.LastError != "" {
+		t.Fatalf("key replacement retained stale snapshot: %+v", updated)
+	}
+	if string(updated.CredentialCiphertext) != "ciphertext-v2" {
+		t.Fatalf("replacement credential = %q", updated.CredentialCiphertext)
+	}
+	if err := db.SaveBalanceSuccess(c.ID, c.CredentialVersion, want, time.Now()); !errors.Is(err, ErrBalanceCredentialChanged) {
+		t.Fatalf("stale refresh save error = %v, want credential changed", err)
+	}
+	updated, err = db.GetBalanceConfig(c.ID)
+	if err != nil || len(updated.Balances) != 0 {
+		t.Fatalf("stale refresh restored old balance: %+v, %v", updated.Balances, err)
+	}
+
+	updated, err = db.UpdateBalanceConfig(BalanceConfig{
+		ID: c.ID, Provider: c.Provider, Name: "renamed", IntervalSeconds: 600,
+	}, false)
+	if err != nil {
+		t.Fatalf("metadata-only update: %v", err)
+	}
+	if updated.Name != "renamed" || string(updated.CredentialCiphertext) != "ciphertext-v2" {
+		t.Fatalf("metadata-only update changed credential: %+v", updated)
+	}
+	rows, err := db.ListBalanceConfigs()
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("ListBalanceConfigs = %d rows, %v", len(rows), err)
+	}
+}
+
 func TestConversationAndMessages(t *testing.T) {
 	db := newTestDB(t)
 	p, err := db.CreateProfile(Profile{Name: "p1", SandboxMode: "read-only"})

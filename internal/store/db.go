@@ -187,6 +187,23 @@ CREATE INDEX idx_tasks_active_schedule ON tasks(deleted_at, enabled, next_run_at
 	// gpt-*-sol glob, which would price it at 5.6 Sol's $4/$20 instead of the
 	// real $2/$10.
 	gpt61SolPriceMigration,
+	// 13: encrypted provider credentials and last successful balance snapshot.
+	`
+CREATE TABLE IF NOT EXISTS balance_configs (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider         TEXT    NOT NULL,
+    name             TEXT    NOT NULL,
+    credential_enc   BLOB    NOT NULL,
+    credential_version INTEGER NOT NULL DEFAULT 1,
+    interval_seconds INTEGER NOT NULL,
+    balance_json     TEXT    NOT NULL DEFAULT '',
+    last_success_at  TEXT    NOT NULL DEFAULT '',
+    last_error       TEXT    NOT NULL DEFAULT '',
+    created_at       TEXT    NOT NULL,
+    updated_at       TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_balance_configs_provider ON balance_configs(provider, id);
+`,
 }
 
 // Versions of the price-backfill migrations. Tests rewind schema_migrations to

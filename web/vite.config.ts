@@ -17,7 +17,8 @@ export default defineConfig({
       // /api/chat/stream SSE endpoint works in dev without extra config.
       '/api': {
         target: 'http://localhost:8080',
-        changeOrigin: true,
+        // Preserve the browser Host so the API's Origin/Host mutation check passes.
+        changeOrigin: false,
       },
     },
   },
